@@ -34,9 +34,9 @@ type GitPromptInfo struct {
 }
 
 type JJPromptInfo struct {
-	BookmarkName string
-	ChangeID     string
-	IsEmpty      bool
+	Bookmarks string
+	RefName   string
+	IsEmpty   bool
 }
 
 func getJJPromptInfo() (*JJPromptInfo, error) {
@@ -46,6 +46,12 @@ func getJJPromptInfo() (*JJPromptInfo, error) {
 	}
 	changeId := strings.TrimSpace(string(cmd))
 
+	cmd, err = exec.Command("jj", "log", "--no-graph", "-r", "@", "--color=never", "-T", "bookmarks").Output()
+	if err != nil {
+		return nil, err
+	}
+	bookmarks := strings.TrimSpace(string(cmd))
+
 	cmd, err = exec.Command("jj", "log", "--no-graph", "-r", "@", "--color=never", "-T", "empty").Output()
 	if err != nil {
 		return nil, err
@@ -53,9 +59,9 @@ func getJJPromptInfo() (*JJPromptInfo, error) {
 	isEmpty := strings.TrimSpace(string(cmd)) == "true"
 
 	return &JJPromptInfo{
-		BookmarkName: "",
-		ChangeID:     changeId,
-		IsEmpty:      isEmpty,
+		Bookmarks: bookmarks,
+		RefName:   changeId,
+		IsEmpty:   isEmpty,
 	}, nil
 }
 
@@ -160,9 +166,12 @@ func main() {
 		changedIndicator := ""
 		untrackedIndicator := ""
 		if jjInfo, err := getJJPromptInfo(); err == nil {
-			refIndicator = jjInfo.ChangeID
+			refIndicator = jjInfo.RefName
 			if !jjInfo.IsEmpty {
 				changedIndicator = "*"
+			}
+			if jjInfo.Bookmarks != "" {
+				refIndicator = fmt.Sprintf("%s %s(%s)%s", refIndicator, ansiWhite, jjInfo.Bookmarks, ansiPink)
 			}
 		} else if gitInfo, err := getGitPromptInfo(); err == nil {
 			refIndicator = gitInfo.RefName
