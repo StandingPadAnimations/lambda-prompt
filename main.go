@@ -8,7 +8,6 @@ import (
 
 	"github.com/go-git/go-git/v6"
 	"github.com/go-git/go-git/v6/plumbing"
-	"github.com/go-git/go-git/v6/plumbing/object"
 )
 
 const ansiBlue = "\\[\033[34m\\]"
@@ -29,7 +28,6 @@ type GitPromptInfo struct {
 	RefName        string
 	ChangedFiles   int
 	UntrackedFiles int
-	Commits        int
 }
 
 func getGitPromptInfo() (*GitPromptInfo, error) {
@@ -48,7 +46,7 @@ func getGitPromptInfo() (*GitPromptInfo, error) {
 	headRef, err := repo.Head()
 	if err != nil {
 		if errors.Is(err, plumbing.ErrReferenceNotFound) {
-			return &GitPromptInfo{RefName: "unborn", ChangedFiles: 0, UntrackedFiles: 0, Commits: 0}, nil
+			return &GitPromptInfo{RefName: "unborn", ChangedFiles: 0, UntrackedFiles: 0}, nil
 		}
 		return nil, err
 	}
@@ -87,20 +85,10 @@ func getGitPromptInfo() (*GitPromptInfo, error) {
 		}
 	}
 
-	commitIter, err := repo.Log(&git.LogOptions{From: headRef.Hash()})
-	var count int
-	if err == nil {
-		_ = commitIter.ForEach(func(_ *object.Commit) error {
-			count++
-			return nil
-		})
-	}
-
 	return &GitPromptInfo{
 		RefName:        name,
 		ChangedFiles:   changedFiles,
 		UntrackedFiles: untrackedFiles,
-		Commits:        count,
 	}, nil
 }
 
