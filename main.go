@@ -21,7 +21,9 @@ _lambda_prompt() {
     PS1="$(lambda-prompt)"
     return $exit
 }
-PROMPT_COMMAND+=(_lambda_prompt)
+if [[ ! " ${PROMPT_COMMAND[*]} " =~ " _lambda_prompt " ]]; then
+    PROMPT_COMMAND+=(_lambda_prompt)
+fi
 `
 
 type GitPromptInfo struct {
