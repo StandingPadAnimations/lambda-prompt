@@ -75,11 +75,7 @@ func getGitPromptInfo() (*GitPromptInfo, error) {
 				switch fileStatus.Worktree {
 				case git.Untracked:
 					untrackedFiles++
-				case git.Deleted:
-					fallthrough
-				case git.Renamed:
-					fallthrough
-				case git.Modified:
+				case git.Deleted, git.Renamed, git.Modified:
 					changedFiles++
 
 				}
