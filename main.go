@@ -55,9 +55,29 @@ func getCwd() string {
 	return cwd
 }
 
+func reducePathWidth(path string) string {
+	if len(path) < 30 {
+		return path
+	}
+	paths := strings.Split(path, "/")
+	shortPaths := make([]string, len(paths))
+	for i, path := range paths {
+		if (len(path) < 2) || (i == len(paths)-1) {
+			shortPaths[i] = path
+		} else {
+			if strings.HasPrefix(path, ".") {
+				shortPaths[i] = path[:3]
+			} else {
+				shortPaths[i] = path[:2]
+			}
+		}
+	}
+	return strings.Join(shortPaths, "/")
+}
+
 func main() {
 	if len(os.Args) < 2 {
-		prompt := fmt.Sprintf(" %sλ %s", ansiBlue, getCwd())
+		prompt := fmt.Sprintf(" %sλ %s", ansiBlue, reducePathWidth(getCwd()))
 		if gitBranch, err := gitInfo(); err == nil && gitBranch != "" {
 			prompt = fmt.Sprintf("%s %s⑂ %s", prompt, ansiPink, gitBranch)
 		}
