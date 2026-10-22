@@ -40,7 +40,7 @@ type JJPromptInfo struct {
 }
 
 func getJJPromptInfo() (*JJPromptInfo, error) {
-	cmd, err := exec.Command("jj", "log", "--no-graph", "-r", "@", "--color=never", "-T", "change_id.short()").Output()
+	cmd, err := exec.Command("jj", "log", "--no-graph", "-r", "@", "--color=never", "-T", "change_id.shortest()").Output()
 	if err != nil {
 		return nil, err
 	}
