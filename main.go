@@ -1,10 +1,14 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"strings"
+
+	"github.com/go-git/go-git/v6"
+	"github.com/go-git/go-git/v6/plumbing"
+	"github.com/go-git/go-git/v6/plumbing/object"
 )
 
 const ansiBlue = "\\[\033[34m\\]"
@@ -19,24 +23,83 @@ function _lambda_prompt() {
 PROMPT_COMMAND=_lambda_prompt
 `
 
-func gitInfo() (string, error) {
-	cmd := exec.Command("git", "symbolic-ref", "--short", "HEAD")
-	cmd.Env = append(cmd.Environ(), "LANG=en")
+type GitPromptInfo struct {
+	RefName        string
+	ChangedFiles   int
+	UntrackedFiles int
+	Commits        int
+}
 
-	out, err := cmd.Output()
+func getGitPromptInfo() (*GitPromptInfo, error) {
+	cwd, err := os.Getwd()
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
-	branch := strings.TrimSpace(string(out))
-	if branch == "HEAD" {
-		hashCmd := exec.Command("git", "rev-parse", "--short", "HEAD")
-		if hashOut, err := hashCmd.Output(); err == nil {
-			branch = ":" + strings.TrimSpace(string(hashOut))
+	repo, err := git.PlainOpenWithOptions(cwd, &git.PlainOpenOptions{
+		DetectDotGit: true,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	headRef, err := repo.Head()
+	if err != nil {
+		if errors.Is(err, plumbing.ErrReferenceNotFound) {
+			return &GitPromptInfo{RefName: "unborn", ChangedFiles: 0, UntrackedFiles: 0, Commits: 0}, nil
+		}
+		return nil, err
+	}
+
+	var name string
+	if headRef.Name().IsBranch() {
+		name = headRef.Name().Short()
+	} else {
+		hash := headRef.Hash().String()
+		if len(hash) >= 7 {
+			name = ":" + hash[:7]
+		} else {
+			name = ":" + hash
 		}
 	}
 
-	return branch, nil
+	worktree, err := repo.Worktree()
+	changedFiles := 0
+	untrackedFiles := 0
+	if err == nil {
+		status, err := worktree.Status()
+		if err == nil {
+			for _, fileStatus := range status {
+				switch fileStatus.Worktree {
+				case git.Untracked:
+					untrackedFiles++
+				case git.Deleted:
+					fallthrough
+				case git.Renamed:
+					fallthrough
+				case git.Modified:
+					changedFiles++
+
+				}
+			}
+		}
+	}
+
+	commitIter, err := repo.Log(&git.LogOptions{From: headRef.Hash()})
+	var count int
+	if err == nil {
+		_ = commitIter.ForEach(func(_ *object.Commit) error {
+			count++
+			return nil
+		})
+	}
+
+	return &GitPromptInfo{
+		RefName:        name,
+		ChangedFiles:   changedFiles,
+		UntrackedFiles: untrackedFiles,
+		Commits:        count,
+	}, nil
 }
 
 func getCwd() string {
@@ -77,11 +140,19 @@ func reducePathWidth(path string) string {
 
 func main() {
 	if len(os.Args) < 2 {
-		prompt := fmt.Sprintf(" %sλ %s", ansiBlue, reducePathWidth(getCwd()))
-		if gitBranch, err := gitInfo(); err == nil && gitBranch != "" {
-			prompt = fmt.Sprintf("%s %s⑂ %s", prompt, ansiPink, gitBranch)
+		prompt := fmt.Sprintf("%sλ %s", ansiBlue, reducePathWidth(getCwd()))
+		if gitInfo, err := getGitPromptInfo(); err == nil {
+			changedIndicator := ""
+			if gitInfo.ChangedFiles > 0 {
+				changedIndicator = fmt.Sprintf("!%d", gitInfo.ChangedFiles)
+			}
+			untrackedIndicator := ""
+			if gitInfo.UntrackedFiles > 0 {
+				untrackedIndicator = fmt.Sprintf("+%d", gitInfo.UntrackedFiles)
+			}
+			prompt = strings.TrimSpace(fmt.Sprintf("%s %s⑂%s %s %s", prompt, ansiPink, gitInfo.RefName, changedIndicator, untrackedIndicator))
 		}
-		prompt = fmt.Sprintf("%s%s ", prompt, ansiReset)
+		prompt = fmt.Sprintf(" %s%s ", prompt, ansiReset)
 		fmt.Println(prompt)
 		return
 	}
