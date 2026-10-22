@@ -161,7 +161,7 @@ func reducePathWidth(path string) string {
 
 func main() {
 	if len(os.Args) < 2 {
-		prompt := fmt.Sprintf("%sλ %s", ansiBlue, reducePathWidth(getCwd()))
+		prompt := fmt.Sprintf("%s%s", ansiBlue, reducePathWidth(getCwd()))
 		refIndicator := ""
 		changedIndicator := ""
 		untrackedIndicator := ""
@@ -185,7 +185,7 @@ func main() {
 		if refIndicator != "" {
 			prompt = strings.TrimSpace(fmt.Sprintf("%s %s⑂ %s %s %s", prompt, ansiPink, refIndicator, changedIndicator, untrackedIndicator))
 		}
-		prompt = fmt.Sprintf(" %s%s ", prompt, ansiReset)
+		prompt = fmt.Sprintf(" %s %sλ%s ", prompt, ansiBlue, ansiReset)
 		fmt.Println(prompt)
 		return
 	}
