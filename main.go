@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"os"
@@ -34,35 +35,29 @@ type GitPromptInfo struct {
 }
 
 type JJPromptInfo struct {
-	Bookmarks string
-	RefName   string
-	IsEmpty   bool
+	ChangeIDPrefix string   `json:"change_id_prefix"`
+	Bookmarks      []string `json:"bookmarks"`
+	Empty          bool     `json:"empty"`
+	ModifiedFiles  int      `json:"modified_files"`
+	UntrackedFiles int      `json:"untracked_files"`
 }
 
 func getJJPromptInfo() (*JJPromptInfo, error) {
-	cmd, err := exec.Command("jj", "log", "--no-graph", "-r", "@", "--color=never", "-T", "change_id.shortest()").Output()
+	// Outsource as much work to jj
+	// because we can do it in a single
+	// command.
+	cmd, err := exec.Command("jj", "log", "--no-graph", "-r", "@", "--color=never", "-T", "json({'change_id_prefix' => change_id.shortest().prefix(), 'bookmarks' => bookmarks.map(|b| b.name()), 'empty' => empty, 'modified_files' => self.diff().files().filter(|f| f.status() == 'modified' || f.status() == 'removed' || f.status() == 'renamed').len(), 'untracked_files' => self.diff().files().filter(|f| f.status() == 'added' || f.status() == 'copied').len()})").Output()
 	if err != nil {
 		return nil, err
 	}
 	changeId := strings.TrimSpace(string(cmd))
 
-	cmd, err = exec.Command("jj", "log", "--no-graph", "-r", "@", "--color=never", "-T", "bookmarks").Output()
-	if err != nil {
+	var info JJPromptInfo
+	if err := json.Unmarshal([]byte(changeId), &info); err != nil {
 		return nil, err
 	}
-	bookmarks := strings.TrimSpace(string(cmd))
 
-	cmd, err = exec.Command("jj", "log", "--no-graph", "-r", "@", "--color=never", "-T", "empty").Output()
-	if err != nil {
-		return nil, err
-	}
-	isEmpty := strings.TrimSpace(string(cmd)) == "true"
-
-	return &JJPromptInfo{
-		Bookmarks: bookmarks,
-		RefName:   changeId,
-		IsEmpty:   isEmpty,
-	}, nil
+	return &info, nil
 }
 
 func getGitPromptInfo() (*GitPromptInfo, error) {
@@ -110,7 +105,6 @@ func getGitPromptInfo() (*GitPromptInfo, error) {
 					untrackedFiles++
 				case git.Deleted, git.Renamed, git.Modified:
 					changedFiles++
-
 				}
 			}
 		}
@@ -166,12 +160,17 @@ func main() {
 		changedIndicator := ""
 		untrackedIndicator := ""
 		if jjInfo, err := getJJPromptInfo(); err == nil {
-			refIndicator = jjInfo.RefName
-			if !jjInfo.IsEmpty {
-				changedIndicator = "*"
+			refIndicator = jjInfo.ChangeIDPrefix
+			if !jjInfo.Empty {
+				if jjInfo.ModifiedFiles > 0 {
+					changedIndicator = fmt.Sprintf("!%d", jjInfo.ModifiedFiles)
+				}
+				if jjInfo.UntrackedFiles > 0 {
+					untrackedIndicator = fmt.Sprintf("+%d", jjInfo.UntrackedFiles)
+				}
 			}
-			if jjInfo.Bookmarks != "" {
-				refIndicator = fmt.Sprintf("%s %s(%s)%s", refIndicator, ansiWhite, jjInfo.Bookmarks, ansiPink)
+			if len(jjInfo.Bookmarks) > 0 {
+				refIndicator = fmt.Sprintf("%s %s(%s)%s", refIndicator, ansiWhite, strings.Join(jjInfo.Bookmarks, " "), ansiPink)
 			}
 		} else if gitInfo, err := getGitPromptInfo(); err == nil {
 			refIndicator = gitInfo.RefName
