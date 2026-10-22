@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"strings"
 
 	"github.com/go-git/go-git/v6"
@@ -30,6 +31,32 @@ type GitPromptInfo struct {
 	RefName        string
 	ChangedFiles   int
 	UntrackedFiles int
+}
+
+type JJPromptInfo struct {
+	BookmarkName string
+	ChangeID     string
+	IsEmpty      bool
+}
+
+func getJJPromptInfo() (*JJPromptInfo, error) {
+	cmd, err := exec.Command("jj", "log", "--no-graph", "-r", "@", "--color=never", "-T", "change_id.short()").Output()
+	if err != nil {
+		return nil, err
+	}
+	changeId := strings.TrimSpace(string(cmd))
+
+	cmd, err = exec.Command("jj", "log", "--no-graph", "-r", "@", "--color=never", "-T", "empty").Output()
+	if err != nil {
+		return nil, err
+	}
+	isEmpty := strings.TrimSpace(string(cmd)) == "true"
+
+	return &JJPromptInfo{
+		BookmarkName: "",
+		ChangeID:     changeId,
+		IsEmpty:      isEmpty,
+	}, nil
 }
 
 func getGitPromptInfo() (*GitPromptInfo, error) {
@@ -129,16 +156,25 @@ func reducePathWidth(path string) string {
 func main() {
 	if len(os.Args) < 2 {
 		prompt := fmt.Sprintf("%sλ %s", ansiBlue, reducePathWidth(getCwd()))
-		if gitInfo, err := getGitPromptInfo(); err == nil {
-			changedIndicator := ""
+		refIndicator := ""
+		changedIndicator := ""
+		untrackedIndicator := ""
+		if jjInfo, err := getJJPromptInfo(); err == nil {
+			refIndicator = jjInfo.ChangeID
+			if !jjInfo.IsEmpty {
+				changedIndicator = "*"
+			}
+		} else if gitInfo, err := getGitPromptInfo(); err == nil {
+			refIndicator = gitInfo.RefName
 			if gitInfo.ChangedFiles > 0 {
 				changedIndicator = fmt.Sprintf("!%d", gitInfo.ChangedFiles)
 			}
-			untrackedIndicator := ""
 			if gitInfo.UntrackedFiles > 0 {
 				untrackedIndicator = fmt.Sprintf("+%d", gitInfo.UntrackedFiles)
 			}
-			prompt = strings.TrimSpace(fmt.Sprintf("%s %s⑂%s %s %s", prompt, ansiPink, gitInfo.RefName, changedIndicator, untrackedIndicator))
+		}
+		if refIndicator != "" {
+			prompt = strings.TrimSpace(fmt.Sprintf("%s %s⑂ %s %s %s", prompt, ansiPink, refIndicator, changedIndicator, untrackedIndicator))
 		}
 		prompt = fmt.Sprintf(" %s%s ", prompt, ansiReset)
 		fmt.Println(prompt)
