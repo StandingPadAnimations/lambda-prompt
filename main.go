@@ -17,10 +17,12 @@ const ansiWhite = "\\[\033[97m\\]"
 const ansiReset = "\\[\033[0m\\]"
 
 const initScript = `
-function _lambda_prompt() {
-	PS1="$(lambda-prompt)"
+_lambda_prompt() {
+    local exit=$?
+    PS1="$(lambda-prompt)"
+    return $exit
 }
-PROMPT_COMMAND=_lambda_prompt
+PROMPT_COMMAND+=(_lambda_prompt)
 `
 
 type GitPromptInfo struct {
