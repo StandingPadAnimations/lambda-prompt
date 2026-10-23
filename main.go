@@ -28,15 +28,15 @@ fi
 
 type GitPromptInfo struct {
 	RefName        string
-	ChangedFiles   int
-	UntrackedFiles int
+	ChangedFiles   uint64
+	UntrackedFiles uint64
 }
 
 type JJPromptInfo struct {
-	ChangeIDPrefix string   `json:"change_id_prefix"`
 	Bookmarks      []string `json:"bookmarks"`
-	ModifiedFiles  int      `json:"modified_files"`
-	UntrackedFiles int      `json:"untracked_files"`
+	ChangeIDPrefix string   `json:"change_id_prefix"`
+	ModifiedFiles  uint64   `json:"modified_files"`
+	UntrackedFiles uint64   `json:"untracked_files"`
 }
 
 func getJJPromptInfo() (*JJPromptInfo, error) {
