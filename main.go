@@ -49,13 +49,12 @@ func getJJPromptInfo() (*JJPromptInfo, error) {
 	if err != nil {
 		return nil, err
 	}
-	changeId := strings.TrimSpace(string(cmd))
+	jjInfo := strings.TrimSpace(string(cmd))
 
 	var info JJPromptInfo
-	if err := json.Unmarshal([]byte(changeId), &info); err != nil {
+	if err := json.Unmarshal([]byte(jjInfo), &info); err != nil {
 		return nil, err
 	}
-
 	return &info, nil
 }
 
