@@ -32,6 +32,8 @@ type GitPromptInfo struct {
 	ModifiedFiles  uint64
 	UntrackedFiles uint64
 	StashCount     uint64
+	AheadRemote    uint64
+	BehindRemote   uint64
 }
 
 type JJPromptInfo struct {
@@ -94,6 +96,16 @@ func getGitPromptInfo() (*GitPromptInfo, error) {
 			if err == nil {
 				info.StashCount = count
 			}
+		case strings.HasPrefix(line, "# branch.ab "):
+			aheadBehind := strings.TrimPrefix(line, "# branch.ab ")
+			aheadBehindSplit := strings.Split(aheadBehind, " ")
+			if aheadBy, err := strconv.ParseUint(aheadBehindSplit[0][1:], 10, 64); err == nil {
+				info.AheadRemote = aheadBy
+			}
+			if behindBy, err := strconv.ParseUint(aheadBehindSplit[1][1:], 10, 64); err == nil {
+				info.BehindRemote = behindBy
+			}
+
 		case line[0] == '?':
 			info.UntrackedFiles++
 		case line[0] == '1' || line[0] == '2' || line[0] == 'u':
@@ -153,6 +165,8 @@ func main() {
 		changedIndicator := ""
 		untrackedIndicator := ""
 		stashIndicator := ""
+		aheadIndicator := ""
+		behindIndicator := ""
 		if jjInfo, err := getJJPromptInfo(); err == nil {
 			refIndicator = jjInfo.ChangeIDPrefix
 			if jjInfo.ModifiedFiles > 0 {
@@ -174,6 +188,12 @@ func main() {
 			}
 			if gitInfo.StashCount > 0 {
 				stashIndicator = fmt.Sprintf("*%d", gitInfo.StashCount)
+			}
+			if gitInfo.AheadRemote > 0 {
+				aheadIndicator = fmt.Sprintf("a%d", gitInfo.AheadRemote)
+			}
+			if gitInfo.BehindRemote > 0 {
+				behindIndicator = fmt.Sprintf("b%d", gitInfo.BehindRemote)
 			}
 		}
 		if refIndicator != "" {
@@ -199,6 +219,18 @@ func main() {
 					prompt.WriteString(ansiPink)
 				}
 				prompt.WriteString(stashIndicator)
+			}
+			if aheadIndicator != "" {
+				prompt.WriteRune(' ')
+				prompt.WriteString(ansiWhite)
+				prompt.WriteString(aheadIndicator)
+			}
+			if behindIndicator != "" {
+				prompt.WriteRune(' ')
+				if aheadIndicator != "" {
+					prompt.WriteString(ansiPink)
+				}
+				prompt.WriteString(behindIndicator)
 			}
 		}
 
