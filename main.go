@@ -44,10 +44,20 @@ type JJPromptInfo struct {
 }
 
 func getJJPromptInfo() (*JJPromptInfo, error) {
-	// Outsource as much work to jj
-	// because we can do it in a single
-	// command.
-	cmd, err := exec.Command("jj", "log", "--no-graph", "-r", "@", "--color=never", "-T", "json({'change_id_prefix' => change_id.shortest().prefix(), 'bookmarks' => bookmarks.map(|b| b.name()), 'modified_files' => self.diff().files().filter(|f| f.status() == 'modified' || f.status() == 'removed' || f.status() == 'renamed').len(), 'untracked_files' => self.diff().files().filter(|f| f.status() == 'added' || f.status() == 'copied').len()})").Output()
+	// Outsource as much work as we
+	// can to jj because we can do it
+	// in a single command.
+	const jjTemplate = `json({
+		'change_id_prefix' => change_id.shortest().prefix(),
+		'bookmarks' => bookmarks.map(|b| b.name()),
+		'modified_files' => self.diff().files().filter(|f| 
+			f.status() == 'modified' || f.status() == 'removed' || f.status() == 'renamed'
+		).len(),
+		'untracked_files' => self.diff().files().filter(|f| 
+			f.status() == 'added' || f.status() == 'copied'
+		).len()
+	})`
+	cmd, err := exec.Command("jj", "log", "--no-graph", "-r", "@", "--color=never", "-T", jjTemplate).Output()
 	if err != nil {
 		return nil, err
 	}
