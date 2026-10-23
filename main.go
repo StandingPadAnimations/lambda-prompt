@@ -137,7 +137,10 @@ func reducePathWidth(path string) string {
 
 func main() {
 	if len(os.Args) < 2 {
-		prompt := fmt.Sprintf("%s%s", ansiBlue, reducePathWidth(getCwd()))
+		var prompt strings.Builder
+		prompt.WriteRune(' ')
+		prompt.WriteString(ansiBlue)
+		prompt.WriteString(reducePathWidth(getCwd()))
 		refIndicator := ""
 		changedIndicator := ""
 		untrackedIndicator := ""
@@ -162,19 +165,27 @@ func main() {
 			}
 		}
 		if refIndicator != "" {
-			prompt = fmt.Sprintf("%s %s%s", prompt, ansiPink, refIndicator)
+			prompt.WriteRune(' ')
+			prompt.WriteString(ansiPink)
+			prompt.WriteString(refIndicator)
 
 			// Concatenate these to avoid large
 			// amounts of spaces
 			if changedIndicator != "" {
-				prompt += " " + ansiWhite + changedIndicator
+				prompt.WriteRune(' ')
+				prompt.WriteString(changedIndicator)
 			}
 			if untrackedIndicator != "" {
-				prompt += " " + ansiPink + untrackedIndicator
+				prompt.WriteRune(' ')
+				prompt.WriteString(untrackedIndicator)
 			}
 		}
-		prompt = fmt.Sprintf(" %s %sλ%s ", prompt, ansiBlue, ansiReset)
-		fmt.Println(prompt)
+		prompt.WriteRune(' ')
+		prompt.WriteString(ansiBlue)
+		prompt.WriteRune('λ')
+		prompt.WriteString(ansiReset)
+		prompt.WriteRune(' ')
+		fmt.Println(prompt.String())
 		return
 	}
 	switch os.Args[1] {
