@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 )
 
@@ -30,6 +31,7 @@ type GitPromptInfo struct {
 	RefName        string
 	ModifiedFiles  uint64
 	UntrackedFiles uint64
+	StashCount     uint64
 }
 
 type JJPromptInfo struct {
@@ -57,7 +59,7 @@ func getJJPromptInfo() (*JJPromptInfo, error) {
 }
 
 func getGitPromptInfo() (*GitPromptInfo, error) {
-	cmd := exec.Command("git", "status", "--porcelain=v2", "--branch")
+	cmd := exec.Command("git", "status", "--porcelain=v2", "--branch", "--show-stash")
 	out, err := cmd.Output()
 	if err != nil {
 		return nil, err
@@ -85,6 +87,12 @@ func getGitPromptInfo() (*GitPromptInfo, error) {
 				info.RefName = oid[:7]
 			} else {
 				info.RefName = oid
+			}
+		case strings.HasPrefix(line, "# stash "):
+			stash := strings.TrimPrefix(line, "# stash ")
+			count, err := strconv.ParseUint(stash, 10, 64)
+			if err == nil {
+				info.StashCount = count
 			}
 		case line[0] == '?':
 			info.UntrackedFiles++
@@ -144,6 +152,7 @@ func main() {
 		refIndicator := ""
 		changedIndicator := ""
 		untrackedIndicator := ""
+		stashIndicator := ""
 		if jjInfo, err := getJJPromptInfo(); err == nil {
 			refIndicator = jjInfo.ChangeIDPrefix
 			if jjInfo.ModifiedFiles > 0 {
@@ -163,6 +172,9 @@ func main() {
 			if gitInfo.UntrackedFiles > 0 {
 				untrackedIndicator = fmt.Sprintf("?%d", gitInfo.UntrackedFiles)
 			}
+			if gitInfo.StashCount > 0 {
+				stashIndicator = fmt.Sprintf("*%d", gitInfo.StashCount)
+			}
 		}
 		if refIndicator != "" {
 			prompt.WriteRune(' ')
@@ -173,11 +185,22 @@ func main() {
 			// amounts of spaces
 			if changedIndicator != "" {
 				prompt.WriteRune(' ')
+				prompt.WriteString(ansiWhite)
 				prompt.WriteString(changedIndicator)
 			}
 			if untrackedIndicator != "" {
 				prompt.WriteRune(' ')
+				if changedIndicator != "" {
+					prompt.WriteString(ansiPink)
+				}
 				prompt.WriteString(untrackedIndicator)
+			}
+			if stashIndicator != "" {
+				prompt.WriteRune(' ')
+				if changedIndicator != "" {
+					prompt.WriteString(ansiPink)
+				}
+				prompt.WriteString(stashIndicator)
 			}
 		}
 		prompt.WriteRune(' ')
