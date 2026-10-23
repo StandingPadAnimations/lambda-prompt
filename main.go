@@ -181,8 +181,6 @@ func main() {
 			prompt.WriteString(ansiPink)
 			prompt.WriteString(refIndicator)
 
-			// Concatenate these to avoid large
-			// amounts of spaces
 			if changedIndicator != "" {
 				prompt.WriteRune(' ')
 				prompt.WriteString(ansiWhite)
@@ -203,11 +201,10 @@ func main() {
 				prompt.WriteString(stashIndicator)
 			}
 		}
-		prompt.WriteRune(' ')
-		prompt.WriteString(ansiBlue)
-		prompt.WriteRune('λ')
-		prompt.WriteString(ansiReset)
-		prompt.WriteRune(' ')
+
+		// The Go compiler _should_ concatenate
+		// this at compile time.
+		prompt.WriteString(" " + ansiBlue + "λ" + ansiReset + " ")
 		fmt.Println(prompt.String())
 		return
 	}
