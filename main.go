@@ -28,7 +28,7 @@ fi
 
 type GitPromptInfo struct {
 	RefName        string
-	ChangedFiles   uint64
+	ModifiedFiles  uint64
 	UntrackedFiles uint64
 }
 
@@ -89,7 +89,7 @@ func getGitPromptInfo() (*GitPromptInfo, error) {
 		case line[0] == '?':
 			info.UntrackedFiles++
 		case line[0] == '1' || line[0] == '2' || line[0] == 'u':
-			info.ChangedFiles++
+			info.ModifiedFiles++
 		}
 	}
 
@@ -157,8 +157,8 @@ func main() {
 			}
 		} else if gitInfo, err := getGitPromptInfo(); err == nil {
 			refIndicator = gitInfo.RefName
-			if gitInfo.ChangedFiles > 0 {
-				changedIndicator = fmt.Sprintf("!%d", gitInfo.ChangedFiles)
+			if gitInfo.ModifiedFiles > 0 {
+				changedIndicator = fmt.Sprintf("!%d", gitInfo.ModifiedFiles)
 			}
 			if gitInfo.UntrackedFiles > 0 {
 				untrackedIndicator = fmt.Sprintf("?%d", gitInfo.UntrackedFiles)
