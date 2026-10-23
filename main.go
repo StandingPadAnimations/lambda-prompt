@@ -1,15 +1,13 @@
 package main
 
 import (
+	"bufio"
+	"bytes"
 	"encoding/json/v2"
-	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"strings"
-
-	"github.com/go-git/go-git/v6"
-	"github.com/go-git/go-git/v6/plumbing"
 )
 
 const ansiBlue = "\\[\033[34m\\]"
@@ -59,60 +57,46 @@ func getJJPromptInfo() (*JJPromptInfo, error) {
 }
 
 func getGitPromptInfo() (*GitPromptInfo, error) {
-	cwd, err := os.Getwd()
+	cmd := exec.Command("git", "status", "--porcelain=v2", "--branch")
+	out, err := cmd.Output()
 	if err != nil {
 		return nil, err
 	}
+	info := &GitPromptInfo{}
+	scanner := bufio.NewScanner(bytes.NewReader(out))
 
-	repo, err := git.PlainOpenWithOptions(cwd, &git.PlainOpenOptions{
-		DetectDotGit: true,
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	headRef, err := repo.Head()
-	if err != nil {
-		if errors.Is(err, plumbing.ErrReferenceNotFound) {
-			return &GitPromptInfo{RefName: "unborn", ChangedFiles: 0, UntrackedFiles: 0}, nil
+	for scanner.Scan() {
+		line := scanner.Text()
+		if len(line) == 0 {
+			continue
 		}
-		return nil, err
-	}
 
-	var name string
-	if headRef.Name().IsBranch() {
-		name = headRef.Name().Short()
-	} else {
-		hash := headRef.Hash().String()
-		if len(hash) >= 7 {
-			name = ":" + hash[:7]
-		} else {
-			name = ":" + hash
-		}
-	}
-
-	worktree, err := repo.Worktree()
-	changedFiles := 0
-	untrackedFiles := 0
-	if err == nil {
-		status, err := worktree.Status()
-		if err == nil {
-			for _, fileStatus := range status {
-				switch fileStatus.Worktree {
-				case git.Untracked:
-					untrackedFiles++
-				case git.Deleted, git.Renamed, git.Modified:
-					changedFiles++
-				}
+		switch {
+		case strings.HasPrefix(line, "# branch.head "):
+			branch := strings.TrimPrefix(line, "# branch.head ")
+			if branch == "(detached)" {
+				info.RefName = "detached"
+			} else {
+				info.RefName = branch
 			}
+		case strings.HasPrefix(line, "# branch.oid ") && info.RefName == "detached":
+			oid := strings.TrimPrefix(line, "# branch.oid ")
+			if len(oid) >= 7 {
+				info.RefName = oid[:7]
+			} else {
+				info.RefName = oid
+			}
+		case line[0] == '?':
+			info.UntrackedFiles++
+		case line[0] == '1' || line[0] == '2' || line[0] == 'u':
+			info.ChangedFiles++
 		}
 	}
 
-	return &GitPromptInfo{
-		RefName:        name,
-		ChangedFiles:   changedFiles,
-		UntrackedFiles: untrackedFiles,
-	}, nil
+	if err := scanner.Err(); err != nil {
+		return nil, err
+	}
+	return info, nil
 }
 
 func getCwd() string {
