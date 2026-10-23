@@ -37,7 +37,6 @@ type GitPromptInfo struct {
 type JJPromptInfo struct {
 	ChangeIDPrefix string   `json:"change_id_prefix"`
 	Bookmarks      []string `json:"bookmarks"`
-	Empty          bool     `json:"empty"`
 	ModifiedFiles  int      `json:"modified_files"`
 	UntrackedFiles int      `json:"untracked_files"`
 }
@@ -46,7 +45,7 @@ func getJJPromptInfo() (*JJPromptInfo, error) {
 	// Outsource as much work to jj
 	// because we can do it in a single
 	// command.
-	cmd, err := exec.Command("jj", "log", "--no-graph", "-r", "@", "--color=never", "-T", "json({'change_id_prefix' => change_id.shortest().prefix(), 'bookmarks' => bookmarks.map(|b| b.name()), 'empty' => empty, 'modified_files' => self.diff().files().filter(|f| f.status() == 'modified' || f.status() == 'removed' || f.status() == 'renamed').len(), 'untracked_files' => self.diff().files().filter(|f| f.status() == 'added' || f.status() == 'copied').len()})").Output()
+	cmd, err := exec.Command("jj", "log", "--no-graph", "-r", "@", "--color=never", "-T", "json({'change_id_prefix' => change_id.shortest().prefix(), 'bookmarks' => bookmarks.map(|b| b.name()), 'modified_files' => self.diff().files().filter(|f| f.status() == 'modified' || f.status() == 'removed' || f.status() == 'renamed').len(), 'untracked_files' => self.diff().files().filter(|f| f.status() == 'added' || f.status() == 'copied').len()})").Output()
 	if err != nil {
 		return nil, err
 	}
@@ -161,13 +160,11 @@ func main() {
 		untrackedIndicator := ""
 		if jjInfo, err := getJJPromptInfo(); err == nil {
 			refIndicator = jjInfo.ChangeIDPrefix
-			if !jjInfo.Empty {
-				if jjInfo.ModifiedFiles > 0 {
-					changedIndicator = fmt.Sprintf("!%d", jjInfo.ModifiedFiles)
-				}
-				if jjInfo.UntrackedFiles > 0 {
-					untrackedIndicator = fmt.Sprintf("+%d", jjInfo.UntrackedFiles)
-				}
+			if jjInfo.ModifiedFiles > 0 {
+				changedIndicator = fmt.Sprintf("!%d", jjInfo.ModifiedFiles)
+			}
+			if jjInfo.UntrackedFiles > 0 {
+				untrackedIndicator = fmt.Sprintf("+%d", jjInfo.UntrackedFiles)
 			}
 			if len(jjInfo.Bookmarks) > 0 {
 				refIndicator = fmt.Sprintf("%s %s(%s)%s", refIndicator, ansiWhite, strings.Join(jjInfo.Bookmarks, " "), ansiPink)
@@ -182,7 +179,16 @@ func main() {
 			}
 		}
 		if refIndicator != "" {
-			prompt = strings.TrimSpace(fmt.Sprintf("%s %s⑂ %s %s %s", prompt, ansiPink, refIndicator, changedIndicator, untrackedIndicator))
+			prompt = fmt.Sprintf("%s %s%s", prompt, ansiPink, refIndicator)
+
+			// Concatenate these to avoid large
+			// amounts of spaces
+			if changedIndicator != "" {
+				prompt += " " + ansiWhite + changedIndicator
+			}
+			if untrackedIndicator != "" {
+				prompt += " " + ansiPink + untrackedIndicator
+			}
 		}
 		prompt = fmt.Sprintf(" %s %sλ%s ", prompt, ansiBlue, ansiReset)
 		fmt.Println(prompt)
