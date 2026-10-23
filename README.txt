@@ -1,6 +1,6 @@
 Lambda Prompt (also known as lambda-prompt) is
-a propmpt for Bash that gives basic Git and
-JJ status, as well as condenses down path lengths.
+a prompt for Bash that gives basic Git and JJ
+statuses, as well as condenses down path lengths.
 
 To use, build the binary like so:
 
