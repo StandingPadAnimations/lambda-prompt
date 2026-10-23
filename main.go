@@ -150,7 +150,7 @@ func main() {
 				changedIndicator = fmt.Sprintf("!%d", jjInfo.ModifiedFiles)
 			}
 			if jjInfo.UntrackedFiles > 0 {
-				untrackedIndicator = fmt.Sprintf("+%d", jjInfo.UntrackedFiles)
+				untrackedIndicator = fmt.Sprintf("?%d", jjInfo.UntrackedFiles)
 			}
 			if len(jjInfo.Bookmarks) > 0 {
 				refIndicator = fmt.Sprintf("%s %s(%s)%s", refIndicator, ansiWhite, strings.Join(jjInfo.Bookmarks, " "), ansiPink)
@@ -161,7 +161,7 @@ func main() {
 				changedIndicator = fmt.Sprintf("!%d", gitInfo.ChangedFiles)
 			}
 			if gitInfo.UntrackedFiles > 0 {
-				untrackedIndicator = fmt.Sprintf("+%d", gitInfo.UntrackedFiles)
+				untrackedIndicator = fmt.Sprintf("?%d", gitInfo.UntrackedFiles)
 			}
 		}
 		if refIndicator != "" {
