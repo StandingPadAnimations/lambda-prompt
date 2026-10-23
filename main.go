@@ -84,9 +84,9 @@ func getGitPromptInfo() (*GitPromptInfo, error) {
 		case strings.HasPrefix(line, "# branch.oid ") && info.RefName == "detached":
 			oid := strings.TrimPrefix(line, "# branch.oid ")
 			if len(oid) >= 7 {
-				info.RefName = oid[:7]
+				info.RefName = "@" + oid[:7]
 			} else {
-				info.RefName = oid
+				info.RefName = "@" + oid
 			}
 		case strings.HasPrefix(line, "# stash "):
 			stash := strings.TrimPrefix(line, "# stash ")
