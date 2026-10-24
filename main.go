@@ -173,14 +173,15 @@ func reducePathWidth(path string) string {
 	paths := strings.Split(path, "/")
 	shortPaths := make([]string, len(paths))
 	for i, path := range paths {
-		if (len(path) <= 2) || (i == len(paths)-1) {
+		runes := []rune(path)
+		if i == len(paths)-1 {
 			shortPaths[i] = path
+		} else if strings.HasPrefix(path, ".") && len(runes) > 3 {
+			shortPaths[i] = string([]rune(path)[:3])
+		} else if !strings.HasPrefix(path, ".") && len(runes) > 2 {
+			shortPaths[i] = string([]rune(path)[:2])
 		} else {
-			if strings.HasPrefix(path, ".") {
-				shortPaths[i] = string([]rune(path)[:3])
-			} else {
-				shortPaths[i] = string([]rune(path)[:2])
-			}
+			shortPaths[i] = path
 		}
 	}
 	return strings.Join(shortPaths, "/")
