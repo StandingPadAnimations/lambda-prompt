@@ -18,12 +18,18 @@ const ansiReset = "\\[\033[0m\\]"
 
 const initScript = `
 _lambda_prompt() {
-    local exit=$?
+    local exit_code=$?
     PS1="$(lambda-prompt)"
-    return $exit
+    return "$exit_code"
 }
-if [[ ! " ${PROMPT_COMMAND[*]} " =~ " _lambda_prompt " ]]; then
-    PROMPT_COMMAND+=(_lambda_prompt)
+if [[ "${BASH_VERSINFO[0]}" -ge 5 && "${BASH_VERSINFO[1]}" -ge 1 ]]; then
+    if [[ ! " ${PROMPT_COMMAND[*]} " =~ " _lambda_prompt " ]]; then
+        PROMPT_COMMAND+=(_lambda_prompt)
+    fi
+else
+    if [[ ! ";${PROMPT_COMMAND};" =~ ";_lambda_prompt;" ]]; then
+        PROMPT_COMMAND="${PROMPT_COMMAND:+$PROMPT_COMMAND;}_lambda_prompt"
+    fi
 fi
 `
 
