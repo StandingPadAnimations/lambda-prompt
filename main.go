@@ -51,6 +51,18 @@ type JJPromptInfo struct {
 	UntrackedFiles uint64   `json:"untracked_files"`
 }
 
+func getPythonVenv() (string, bool) {
+	envVar, present := os.LookupEnv("VIRTUAL_ENV")
+	if !present {
+		return "", false
+	}
+	split := strings.Split(envVar, "/")
+	if len(split) == 0 {
+		return "", false
+	}
+	return split[len(split)-1], true
+}
+
 func getJJPromptInfo() (*JJPromptInfo, error) {
 	// Outsource as much work as we
 	// can to jj because we can do it
@@ -191,6 +203,11 @@ func main() {
 	if len(os.Args) < 2 {
 		var prompt strings.Builder
 		prompt.WriteRune(' ')
+		if envName, present := getPythonVenv(); present {
+			prompt.WriteRune('(')
+			prompt.WriteString(envName)
+			prompt.WriteString(") ")
+		}
 		prompt.WriteString(ansiBlue)
 		prompt.WriteString(shellEscape(reducePathWidth(getCwd())))
 		if jjInfo, err := getJJPromptInfo(); err == nil {
