@@ -31,6 +31,7 @@ type GitPromptInfo struct {
 	RefName        string
 	ModifiedFiles  uint64
 	UntrackedFiles uint64
+	StagedFiles    uint64
 	StashCount     uint64
 	AheadRemote    uint64
 	BehindRemote   uint64
@@ -119,7 +120,15 @@ func getGitPromptInfo() (*GitPromptInfo, error) {
 		case line[0] == '?':
 			info.UntrackedFiles++
 		case line[0] == '1' || line[0] == '2' || line[0] == 'u':
-			info.ModifiedFiles++
+			x := line[2]
+			y := line[3]
+
+			if x != '.' {
+				info.StagedFiles++
+			}
+			if y != '.' {
+				info.ModifiedFiles++
+			}
 		}
 	}
 
@@ -174,6 +183,7 @@ func main() {
 		refIndicator := ""
 		changedIndicator := ""
 		untrackedIndicator := ""
+		stagedIndicator := ""
 		stashIndicator := ""
 		aheadIndicator := ""
 		behindIndicator := ""
@@ -195,6 +205,9 @@ func main() {
 			}
 			if gitInfo.UntrackedFiles > 0 {
 				untrackedIndicator = fmt.Sprintf("?%d", gitInfo.UntrackedFiles)
+			}
+			if gitInfo.StagedFiles > 0 {
+				stagedIndicator = fmt.Sprintf("+%d", gitInfo.StagedFiles)
 			}
 			if gitInfo.StashCount > 0 {
 				stashIndicator = fmt.Sprintf("*%d", gitInfo.StashCount)
@@ -222,6 +235,13 @@ func main() {
 					prompt.WriteString(ansiPink)
 				}
 				prompt.WriteString(untrackedIndicator)
+			}
+			if stagedIndicator != "" {
+				prompt.WriteRune(' ')
+				if changedIndicator != "" {
+					prompt.WriteString(ansiPink)
+				}
+				prompt.WriteString(stagedIndicator)
 			}
 			if stashIndicator != "" {
 				prompt.WriteRune(' ')
