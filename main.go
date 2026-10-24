@@ -125,7 +125,6 @@ func getGitPromptInfo() (*GitPromptInfo, error) {
 		case line[0] == '1' || line[0] == '2' || line[0] == 'u':
 			x := line[2]
 			y := line[3]
-
 			if x != '.' {
 				info.StagedFiles++
 			}
@@ -183,100 +182,71 @@ func main() {
 		prompt.WriteRune(' ')
 		prompt.WriteString(ansiBlue)
 		prompt.WriteString(reducePathWidth(getCwd()))
-		refIndicator := ""
-		changedIndicator := ""
-		untrackedIndicator := ""
-		stagedIndicator := ""
-		unmergedIndicator := ""
-		stashIndicator := ""
-		aheadIndicator := ""
-		behindIndicator := ""
 		if jjInfo, err := getJJPromptInfo(); err == nil {
-			refIndicator = jjInfo.ChangeIDPrefix
+			prompt.WriteString(" " + ansiPink)
+			prompt.WriteString(jjInfo.ChangeIDPrefix)
+			if len(jjInfo.Bookmarks) > 0 {
+				prompt.WriteString(ansiWhite + " (")
+				prompt.WriteString(strings.Join(jjInfo.Bookmarks, " "))
+				prompt.WriteString(")" + ansiPink)
+			}
 			if jjInfo.ModifiedFiles > 0 {
-				changedIndicator = fmt.Sprintf("!%d", jjInfo.ModifiedFiles)
+				prompt.WriteString(" " + ansiWhite)
+				prompt.WriteString("!" + strconv.FormatUint(jjInfo.ModifiedFiles, 10))
 			}
 			if jjInfo.UntrackedFiles > 0 {
-				untrackedIndicator = fmt.Sprintf("?%d", jjInfo.UntrackedFiles)
-			}
-			if len(jjInfo.Bookmarks) > 0 {
-				refIndicator = fmt.Sprintf("%s %s(%s)%s", refIndicator, ansiWhite, strings.Join(jjInfo.Bookmarks, " "), ansiPink)
+				prompt.WriteRune(' ')
+				if jjInfo.ModifiedFiles > 0 {
+					prompt.WriteString(ansiPink)
+				}
+				prompt.WriteString("?" + strconv.FormatUint(jjInfo.UntrackedFiles, 10))
 			}
 		} else if gitInfo, err := getGitPromptInfo(); err == nil {
-			refIndicator = gitInfo.RefName
+			prompt.WriteString(" " + ansiPink)
+			prompt.WriteString(gitInfo.RefName)
 			if gitInfo.ModifiedFiles > 0 {
-				changedIndicator = fmt.Sprintf("!%d", gitInfo.ModifiedFiles)
+				prompt.WriteString(" " + ansiWhite)
+				prompt.WriteString("!" + strconv.FormatUint(gitInfo.ModifiedFiles, 10))
 			}
 			if gitInfo.UntrackedFiles > 0 {
-				untrackedIndicator = fmt.Sprintf("?%d", gitInfo.UntrackedFiles)
+				prompt.WriteRune(' ')
+				if gitInfo.ModifiedFiles > 0 {
+					prompt.WriteString(ansiPink)
+				}
+				prompt.WriteString("?" + strconv.FormatUint(gitInfo.UntrackedFiles, 10))
+			}
+			if gitInfo.UnmergedFiles > 0 {
+				prompt.WriteString(" " + ansiBlue)
+				prompt.WriteString("~" + strconv.FormatUint(gitInfo.UnmergedFiles, 10))
 			}
 			if gitInfo.StagedFiles > 0 {
-				stagedIndicator = fmt.Sprintf("+%d", gitInfo.StagedFiles)
+				prompt.WriteRune(' ')
+				if gitInfo.ModifiedFiles > 0 {
+					prompt.WriteString(ansiPink)
+				}
+				prompt.WriteString("+" + strconv.FormatUint(gitInfo.StagedFiles, 10))
 			}
 			if gitInfo.StashCount > 0 {
-				stashIndicator = fmt.Sprintf("*%d", gitInfo.StashCount)
+				prompt.WriteRune(' ')
+				if gitInfo.ModifiedFiles > 0 || gitInfo.UnmergedFiles > 0 {
+					prompt.WriteString(ansiPink)
+				}
+				prompt.WriteString("*" + strconv.FormatUint(gitInfo.StashCount, 10))
 			}
 			if gitInfo.AheadRemote > 0 {
-				aheadIndicator = fmt.Sprintf("a%d", gitInfo.AheadRemote)
+				prompt.WriteString(" " + ansiWhite)
+				prompt.WriteString("a" + strconv.FormatUint(gitInfo.AheadRemote, 10))
 			}
 			if gitInfo.BehindRemote > 0 {
-				behindIndicator = fmt.Sprintf("b%d", gitInfo.BehindRemote)
+				prompt.WriteRune(' ')
+				if gitInfo.ModifiedFiles > 0 || gitInfo.UnmergedFiles > 0 || gitInfo.AheadRemote > 0 {
+					prompt.WriteString(ansiPink)
+				}
+				prompt.WriteString("b" + strconv.FormatUint(gitInfo.BehindRemote, 10))
 			}
 		}
-		if refIndicator != "" {
-			prompt.WriteRune(' ')
-			prompt.WriteString(ansiPink)
-			prompt.WriteString(refIndicator)
-
-			if changedIndicator != "" {
-				prompt.WriteRune(' ')
-				prompt.WriteString(ansiWhite)
-				prompt.WriteString(changedIndicator)
-			}
-			if untrackedIndicator != "" {
-				prompt.WriteRune(' ')
-				if changedIndicator != "" {
-					prompt.WriteString(ansiPink)
-				}
-				prompt.WriteString(untrackedIndicator)
-			}
-			if stagedIndicator != "" {
-				prompt.WriteRune(' ')
-				if changedIndicator != "" {
-					prompt.WriteString(ansiPink)
-				}
-				prompt.WriteString(stagedIndicator)
-			}
-			if unmergedIndicator != "" {
-				prompt.WriteRune(' ')
-				prompt.WriteString(ansiBlue)
-				prompt.WriteString(unmergedIndicator)
-			}
-			if stashIndicator != "" {
-				prompt.WriteRune(' ')
-				if changedIndicator != "" || unmergedIndicator != "" {
-					prompt.WriteString(ansiPink)
-				}
-				prompt.WriteString(stashIndicator)
-			}
-			if aheadIndicator != "" {
-				prompt.WriteRune(' ')
-				prompt.WriteString(ansiWhite)
-				prompt.WriteString(aheadIndicator)
-			}
-			if behindIndicator != "" {
-				prompt.WriteRune(' ')
-				if changedIndicator != "" || unmergedIndicator != "" || aheadIndicator != "" {
-					prompt.WriteString(ansiPink)
-				}
-				prompt.WriteString(behindIndicator)
-			}
-		}
-
-		// The Go compiler _should_ concatenate
-		// this at compile time.
 		prompt.WriteString(" " + ansiBlue + "λ" + ansiReset + " ")
-		fmt.Println(prompt.String())
+		fmt.Print(prompt.String())
 		return
 	}
 	switch os.Args[1] {
