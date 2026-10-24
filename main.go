@@ -94,24 +94,19 @@ func getGitPromptInfo() (*GitPromptInfo, error) {
 		}
 
 		switch {
-		case strings.HasPrefix(line, "# branch.head "):
-			branch := strings.TrimPrefix(line, "# branch.head ")
-			if branch == "(detached)" {
-				info.RefName = "detached"
-			} else {
-				info.RefName = branch
-			}
-		case strings.HasPrefix(line, "# branch.oid ") && info.RefName == "detached":
-			oid := strings.TrimPrefix(line, "# branch.oid ")
-			if len(oid) >= 7 {
+		case strings.HasPrefix(line, "# branch.oid "):
+			if oid := strings.TrimPrefix(line, "# branch.oid "); len(oid) >= 7 {
 				info.RefName = "@" + oid[:7]
 			} else {
 				info.RefName = "@" + oid
 			}
+		case strings.HasPrefix(line, "# branch.head "):
+			if branch := strings.TrimPrefix(line, "# branch.head "); branch != "(detached)" {
+				info.RefName = branch
+			}
 		case strings.HasPrefix(line, "# stash "):
 			stash := strings.TrimPrefix(line, "# stash ")
-			count, err := strconv.ParseUint(stash, 10, 64)
-			if err == nil {
+			if count, err := strconv.ParseUint(stash, 10, 64); err == nil {
 				info.StashCount = count
 			}
 		case strings.HasPrefix(line, "# branch.ab "):
