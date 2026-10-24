@@ -206,8 +206,8 @@ func main() {
 				prompt.WriteString(")" + ansiPink)
 			}
 			if jjInfo.ModifiedFiles > 0 {
-				prompt.WriteString(" " + ansiWhite)
-				prompt.WriteString("!" + strconv.FormatUint(jjInfo.ModifiedFiles, 10))
+				prompt.WriteString(" " + ansiWhite + "!")
+				prompt.WriteString(strconv.FormatUint(jjInfo.ModifiedFiles, 10))
 			}
 			if jjInfo.UntrackedFiles > 0 {
 				prompt.WriteRune(' ')
@@ -220,8 +220,8 @@ func main() {
 			prompt.WriteString(" " + ansiPink)
 			prompt.WriteString(shellEscape(gitInfo.RefName))
 			if gitInfo.ModifiedFiles > 0 {
-				prompt.WriteString(" " + ansiWhite)
-				prompt.WriteString("!" + strconv.FormatUint(gitInfo.ModifiedFiles, 10))
+				prompt.WriteString(" " + ansiWhite + "!")
+				prompt.WriteString(strconv.FormatUint(gitInfo.ModifiedFiles, 10))
 			}
 			if gitInfo.UntrackedFiles > 0 {
 				prompt.WriteRune(' ')
@@ -231,8 +231,8 @@ func main() {
 				prompt.WriteString("?" + strconv.FormatUint(gitInfo.UntrackedFiles, 10))
 			}
 			if gitInfo.UnmergedFiles > 0 {
-				prompt.WriteString(" " + ansiBlue)
-				prompt.WriteString("~" + strconv.FormatUint(gitInfo.UnmergedFiles, 10))
+				prompt.WriteString(" " + ansiBlue + "~")
+				prompt.WriteString(strconv.FormatUint(gitInfo.UnmergedFiles, 10))
 			}
 			if gitInfo.StagedFiles > 0 {
 				prompt.WriteRune(' ')
@@ -249,8 +249,8 @@ func main() {
 				prompt.WriteString("*" + strconv.FormatUint(gitInfo.StashCount, 10))
 			}
 			if gitInfo.AheadRemote > 0 {
-				prompt.WriteString(" " + ansiWhite)
-				prompt.WriteString("a" + strconv.FormatUint(gitInfo.AheadRemote, 10))
+				prompt.WriteString(" " + ansiWhite + "a")
+				prompt.WriteString(strconv.FormatUint(gitInfo.AheadRemote, 10))
 			}
 			if gitInfo.BehindRemote > 0 {
 				prompt.WriteRune(' ')
