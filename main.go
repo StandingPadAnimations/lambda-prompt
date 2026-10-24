@@ -65,7 +65,7 @@ func getJJPromptInfo() (*JJPromptInfo, error) {
 			f.status() == 'added' || f.status() == 'copied'
 		).len()
 	})`
-	cmd, err := exec.Command("jj", "log", "--no-graph", "-r", "@", "--color=never", "-T", jjTemplate).Output()
+	cmd, err := exec.Command("jj", "log", "--no-graph", "--ignore-working-copy", "-r", "@", "--color=never", "-T", jjTemplate).Output()
 	if err != nil {
 		return nil, err
 	}
@@ -79,7 +79,7 @@ func getJJPromptInfo() (*JJPromptInfo, error) {
 }
 
 func getGitPromptInfo() (*GitPromptInfo, error) {
-	cmd := exec.Command("git", "status", "--porcelain=v2", "--branch", "--show-stash")
+	cmd := exec.Command("git", "status", "--porcelain=v2", "--no-optional-locks", "--branch", "--show-stash")
 	out, err := cmd.Output()
 	if err != nil {
 		return nil, err
