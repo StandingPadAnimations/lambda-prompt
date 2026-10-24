@@ -206,11 +206,12 @@ func main() {
 				prompt.WriteString(strconv.FormatUint(jjInfo.ModifiedFiles, 10))
 			}
 			if jjInfo.UntrackedFiles > 0 {
-				prompt.WriteRune(' ')
 				if jjInfo.ModifiedFiles > 0 {
-					prompt.WriteString(ansiPink)
+					prompt.WriteString(" " + ansiPink + "?")
+				} else {
+					prompt.WriteString(" ?")
 				}
-				prompt.WriteString("?" + strconv.FormatUint(jjInfo.UntrackedFiles, 10))
+				prompt.WriteString(strconv.FormatUint(jjInfo.UntrackedFiles, 10))
 			}
 		} else if gitInfo, err := getGitPromptInfo(); err == nil {
 			prompt.WriteString(" " + ansiPink)
@@ -220,40 +221,44 @@ func main() {
 				prompt.WriteString(strconv.FormatUint(gitInfo.ModifiedFiles, 10))
 			}
 			if gitInfo.UntrackedFiles > 0 {
-				prompt.WriteRune(' ')
 				if gitInfo.ModifiedFiles > 0 {
-					prompt.WriteString(ansiPink)
+					prompt.WriteString(" " + ansiPink + "?")
+				} else {
+					prompt.WriteString(" ?")
 				}
-				prompt.WriteString("?" + strconv.FormatUint(gitInfo.UntrackedFiles, 10))
+				prompt.WriteString(strconv.FormatUint(gitInfo.UntrackedFiles, 10))
 			}
 			if gitInfo.UnmergedFiles > 0 {
 				prompt.WriteString(" " + ansiBlue + "~")
 				prompt.WriteString(strconv.FormatUint(gitInfo.UnmergedFiles, 10))
 			}
 			if gitInfo.StagedFiles > 0 {
-				prompt.WriteRune(' ')
 				if gitInfo.ModifiedFiles > 0 || gitInfo.UnmergedFiles > 0 {
-					prompt.WriteString(ansiPink)
+					prompt.WriteString(" " + ansiPink + "+")
+				} else {
+					prompt.WriteString(" +")
 				}
-				prompt.WriteString("+" + strconv.FormatUint(gitInfo.StagedFiles, 10))
+				prompt.WriteString(strconv.FormatUint(gitInfo.StagedFiles, 10))
 			}
 			if gitInfo.StashCount > 0 {
-				prompt.WriteRune(' ')
 				if gitInfo.ModifiedFiles > 0 || gitInfo.UnmergedFiles > 0 {
-					prompt.WriteString(ansiPink)
+					prompt.WriteString(" " + ansiPink + "*")
+				} else {
+					prompt.WriteString(" *")
 				}
-				prompt.WriteString("*" + strconv.FormatUint(gitInfo.StashCount, 10))
+				prompt.WriteString(strconv.FormatUint(gitInfo.StashCount, 10))
 			}
 			if gitInfo.AheadRemote > 0 {
 				prompt.WriteString(" " + ansiWhite + "a")
 				prompt.WriteString(strconv.FormatUint(gitInfo.AheadRemote, 10))
 			}
 			if gitInfo.BehindRemote > 0 {
-				prompt.WriteRune(' ')
 				if gitInfo.ModifiedFiles > 0 || gitInfo.UnmergedFiles > 0 || gitInfo.AheadRemote > 0 {
-					prompt.WriteString(ansiPink)
+					prompt.WriteString(" " + ansiPink + "b")
+				} else {
+					prompt.WriteString(" b")
 				}
-				prompt.WriteString("b" + strconv.FormatUint(gitInfo.BehindRemote, 10))
+				prompt.WriteString(strconv.FormatUint(gitInfo.BehindRemote, 10))
 			}
 		}
 		prompt.WriteString(" " + ansiBlue + "λ" + ansiReset + " ")
