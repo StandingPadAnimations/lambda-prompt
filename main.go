@@ -165,7 +165,7 @@ func getCwd() string {
 		return cwd
 	}
 
-	if strings.HasPrefix(cwd, home) {
+	if cwd == home || strings.HasPrefix(cwd, home+"/") {
 		cwd = strings.Replace(cwd, home, "~", 1)
 	}
 	return cwd
@@ -178,13 +178,13 @@ func reducePathWidth(path string) string {
 	paths := strings.Split(path, "/")
 	shortPaths := make([]string, len(paths))
 	for i, path := range paths {
-		if (len(path) < 2) || (i == len(paths)-1) {
+		if (len(path) <= 2) || (i == len(paths)-1) {
 			shortPaths[i] = path
 		} else {
 			if strings.HasPrefix(path, ".") {
-				shortPaths[i] = path[:3]
+				shortPaths[i] = string([]rune(path)[:3])
 			} else {
-				shortPaths[i] = path[:2]
+				shortPaths[i] = string([]rune(path)[:2])
 			}
 		}
 	}
