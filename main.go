@@ -32,6 +32,7 @@ type GitPromptInfo struct {
 	ModifiedFiles  uint64
 	UntrackedFiles uint64
 	StagedFiles    uint64
+	UnmergedFiles  uint64
 	StashCount     uint64
 	AheadRemote    uint64
 	BehindRemote   uint64
@@ -119,6 +120,8 @@ func getGitPromptInfo() (*GitPromptInfo, error) {
 
 		case line[0] == '?':
 			info.UntrackedFiles++
+		case line[0] == 'u':
+			info.UnmergedFiles++
 		case line[0] == '1' || line[0] == '2' || line[0] == 'u':
 			x := line[2]
 			y := line[3]
@@ -184,6 +187,7 @@ func main() {
 		changedIndicator := ""
 		untrackedIndicator := ""
 		stagedIndicator := ""
+		unmergedIndicator := ""
 		stashIndicator := ""
 		aheadIndicator := ""
 		behindIndicator := ""
@@ -243,9 +247,14 @@ func main() {
 				}
 				prompt.WriteString(stagedIndicator)
 			}
+			if unmergedIndicator != "" {
+				prompt.WriteRune(' ')
+				prompt.WriteString(ansiBlue)
+				prompt.WriteString(unmergedIndicator)
+			}
 			if stashIndicator != "" {
 				prompt.WriteRune(' ')
-				if changedIndicator != "" {
+				if changedIndicator != "" || unmergedIndicator != "" {
 					prompt.WriteString(ansiPink)
 				}
 				prompt.WriteString(stashIndicator)
@@ -257,7 +266,7 @@ func main() {
 			}
 			if behindIndicator != "" {
 				prompt.WriteRune(' ')
-				if aheadIndicator != "" {
+				if changedIndicator != "" || unmergedIndicator != "" || aheadIndicator != "" {
 					prompt.WriteString(ansiPink)
 				}
 				prompt.WriteString(behindIndicator)
