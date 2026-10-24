@@ -231,7 +231,7 @@ func main() {
 			}
 			if gitInfo.StagedFiles > 0 {
 				prompt.WriteRune(' ')
-				if gitInfo.ModifiedFiles > 0 {
+				if gitInfo.ModifiedFiles > 0 || gitInfo.UnmergedFiles > 0 {
 					prompt.WriteString(ansiPink)
 				}
 				prompt.WriteString("+" + strconv.FormatUint(gitInfo.StagedFiles, 10))
