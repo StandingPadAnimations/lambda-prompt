@@ -140,6 +140,15 @@ func getGitPromptInfo() (*GitPromptInfo, error) {
 	return info, nil
 }
 
+func shellEscape(s string) string {
+	r := strings.NewReplacer(
+		`\`, `\\`,
+		`$`, `\$`,
+		"`", "\\`",
+	)
+	return r.Replace(s)
+}
+
 func getCwd() string {
 	cwd, err := os.Getwd()
 	if err != nil {
@@ -181,13 +190,13 @@ func main() {
 		var prompt strings.Builder
 		prompt.WriteRune(' ')
 		prompt.WriteString(ansiBlue)
-		prompt.WriteString(reducePathWidth(getCwd()))
+		prompt.WriteString(shellEscape(reducePathWidth(getCwd())))
 		if jjInfo, err := getJJPromptInfo(); err == nil {
 			prompt.WriteString(" " + ansiPink)
-			prompt.WriteString(jjInfo.ChangeIDPrefix)
+			prompt.WriteString(shellEscape(jjInfo.ChangeIDPrefix))
 			if len(jjInfo.Bookmarks) > 0 {
 				prompt.WriteString(ansiWhite + " (")
-				prompt.WriteString(strings.Join(jjInfo.Bookmarks, " "))
+				prompt.WriteString(shellEscape(strings.Join(jjInfo.Bookmarks, " ")))
 				prompt.WriteString(")" + ansiPink)
 			}
 			if jjInfo.ModifiedFiles > 0 {
@@ -203,7 +212,7 @@ func main() {
 			}
 		} else if gitInfo, err := getGitPromptInfo(); err == nil {
 			prompt.WriteString(" " + ansiPink)
-			prompt.WriteString(gitInfo.RefName)
+			prompt.WriteString(shellEscape(gitInfo.RefName))
 			if gitInfo.ModifiedFiles > 0 {
 				prompt.WriteString(" " + ansiWhite)
 				prompt.WriteString("!" + strconv.FormatUint(gitInfo.ModifiedFiles, 10))
