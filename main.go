@@ -11,10 +11,12 @@ import (
 	"strings"
 )
 
-const ansiBlue = "\\[\033[34m\\]"
-const ansiPink = "\\[\033[35m\\]"
-const ansiWhite = "\\[\033[97m\\]"
-const ansiReset = "\\[\033[0m\\]"
+const (
+	ansiBlue  = "\\[\033[34m\\]"
+	ansiPink  = "\\[\033[35m\\]"
+	ansiWhite = "\\[\033[97m\\]"
+	ansiReset = "\\[\033[0m\\]"
+)
 
 const initScript = `
 _lambda_prompt() {
@@ -32,6 +34,33 @@ else
     fi
 fi
 `
+
+type promptBuilder struct {
+	sb    strings.Builder
+	color string
+}
+
+func (p *promptBuilder) setColor(c string) {
+	if p.color != c {
+		p.sb.WriteString(c)
+		p.color = c
+	}
+}
+
+func (p *promptBuilder) writeColored(c, s string) {
+	p.setColor(c)
+	p.sb.WriteString(s)
+}
+
+func (p *promptBuilder) writeStat(c, prefix string, n uint64) {
+	if n == 0 {
+		return
+	}
+	p.sb.WriteByte(' ')
+	p.setColor(c)
+	p.sb.WriteString(prefix)
+	p.sb.WriteString(strconv.FormatUint(n, 10))
+}
 
 type GitPromptInfo struct {
 	RefName        string
@@ -209,85 +238,37 @@ func reducePathWidth(path string) string {
 
 func main() {
 	if len(os.Args) < 2 {
-		var prompt strings.Builder
-		prompt.WriteRune(' ')
+		var prompt promptBuilder
+		prompt.sb.WriteRune(' ')
 		if envName, present := getPythonVenv(); present {
-			prompt.WriteRune('(')
-			prompt.WriteString(envName)
-			prompt.WriteString(") ")
+			prompt.sb.WriteRune('(')
+			prompt.sb.WriteString(envName)
+			prompt.sb.WriteString(") ")
 		}
-		prompt.WriteString(ansiBlue)
-		prompt.WriteString(shellEscape(reducePathWidth(getCwd())))
+		prompt.writeColored(ansiBlue, shellEscape(reducePathWidth(getCwd())))
 		if jjInfo, err := getJJPromptInfo(); err == nil {
-			prompt.WriteString(" " + ansiPink)
-			prompt.WriteString(shellEscape(jjInfo.ChangeIDPrefix))
+			prompt.sb.WriteRune(' ')
+			prompt.writeColored(ansiPink, shellEscape(jjInfo.ChangeIDPrefix))
 			if len(jjInfo.Bookmarks) > 0 {
-				prompt.WriteString(ansiWhite + " (")
-				prompt.WriteString(shellEscape(strings.Join(jjInfo.Bookmarks, " ")))
-				prompt.WriteString(")" + ansiPink)
+				prompt.writeColored(ansiWhite, "(")
+				prompt.sb.WriteString(shellEscape(strings.Join(jjInfo.Bookmarks, " ")))
+				prompt.sb.WriteString(")")
 			}
-			if jjInfo.ModifiedFiles > 0 {
-				prompt.WriteString(" " + ansiWhite + "!")
-				prompt.WriteString(strconv.FormatUint(jjInfo.ModifiedFiles, 10))
-			}
-			if jjInfo.UntrackedFiles > 0 {
-				if jjInfo.ModifiedFiles > 0 {
-					prompt.WriteString(" " + ansiPink + "?")
-				} else {
-					prompt.WriteString(" ?")
-				}
-				prompt.WriteString(strconv.FormatUint(jjInfo.UntrackedFiles, 10))
-			}
+			prompt.writeStat(ansiWhite, "!", jjInfo.ModifiedFiles)
+			prompt.writeStat(ansiPink, "?", jjInfo.UntrackedFiles)
 		} else if gitInfo, err := getGitPromptInfo(); err == nil {
-			prompt.WriteString(" " + ansiPink)
-			prompt.WriteString(shellEscape(gitInfo.RefName))
-			if gitInfo.ModifiedFiles > 0 {
-				prompt.WriteString(" " + ansiWhite + "!")
-				prompt.WriteString(strconv.FormatUint(gitInfo.ModifiedFiles, 10))
-			}
-			if gitInfo.UntrackedFiles > 0 {
-				if gitInfo.ModifiedFiles > 0 {
-					prompt.WriteString(" " + ansiPink + "?")
-				} else {
-					prompt.WriteString(" ?")
-				}
-				prompt.WriteString(strconv.FormatUint(gitInfo.UntrackedFiles, 10))
-			}
-			if gitInfo.UnmergedFiles > 0 {
-				prompt.WriteString(" " + ansiBlue + "~")
-				prompt.WriteString(strconv.FormatUint(gitInfo.UnmergedFiles, 10))
-			}
-			if gitInfo.StagedFiles > 0 {
-				if gitInfo.ModifiedFiles > 0 || gitInfo.UnmergedFiles > 0 {
-					prompt.WriteString(" " + ansiPink + "+")
-				} else {
-					prompt.WriteString(" +")
-				}
-				prompt.WriteString(strconv.FormatUint(gitInfo.StagedFiles, 10))
-			}
-			if gitInfo.StashCount > 0 {
-				if gitInfo.ModifiedFiles > 0 || gitInfo.UnmergedFiles > 0 {
-					prompt.WriteString(" " + ansiPink + "*")
-				} else {
-					prompt.WriteString(" *")
-				}
-				prompt.WriteString(strconv.FormatUint(gitInfo.StashCount, 10))
-			}
-			if gitInfo.AheadRemote > 0 {
-				prompt.WriteString(" " + ansiWhite + "a")
-				prompt.WriteString(strconv.FormatUint(gitInfo.AheadRemote, 10))
-			}
-			if gitInfo.BehindRemote > 0 {
-				if gitInfo.ModifiedFiles > 0 || gitInfo.UnmergedFiles > 0 || gitInfo.AheadRemote > 0 {
-					prompt.WriteString(" " + ansiPink + "b")
-				} else {
-					prompt.WriteString(" b")
-				}
-				prompt.WriteString(strconv.FormatUint(gitInfo.BehindRemote, 10))
-			}
+			prompt.sb.WriteRune(' ')
+			prompt.writeColored(ansiPink, shellEscape(gitInfo.RefName))
+			prompt.writeStat(ansiWhite, "!", gitInfo.ModifiedFiles)
+			prompt.writeStat(ansiPink, "?", gitInfo.UntrackedFiles)
+			prompt.writeStat(ansiBlue, "~", gitInfo.UnmergedFiles)
+			prompt.writeStat(ansiPink, "+", gitInfo.StagedFiles)
+			prompt.writeStat(ansiPink, "*", gitInfo.StashCount)
+			prompt.writeStat(ansiWhite, "a", gitInfo.AheadRemote)
+			prompt.writeStat(ansiPink, "b", gitInfo.BehindRemote)
 		}
-		prompt.WriteString(" " + ansiBlue + "λ" + ansiReset + " ")
-		fmt.Print(prompt.String())
+		prompt.sb.WriteString(" " + ansiBlue + "λ" + ansiReset + " ")
+		fmt.Print(prompt.sb.String())
 		return
 	}
 	switch os.Args[1] {
