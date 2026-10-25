@@ -127,7 +127,7 @@ func getGitPromptInfo() (*GitPromptInfo, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
 
-	out, err := exec.CommandContext(ctx, "git", "status", "--porcelain=v2", "--branch", "--show-stash").Output()
+	out, err := exec.CommandContext(ctx, "git", "--no-optional-locks", "status", "--porcelain=v2", "--branch", "--show-stash").Output()
 	if err != nil {
 		return nil, err
 	}
@@ -164,12 +164,12 @@ func getGitPromptInfo() (*GitPromptInfo, error) {
 			aheadBehind := strings.TrimPrefix(line, "# branch.ab ")
 			if aheadStr, behindStr, ok := strings.Cut(aheadBehind, " "); ok {
 				if len(aheadStr) > 1 {
-					if aheadBy, err := strconv.ParseUint(aheadStr, 10, 64); err == nil {
+					if aheadBy, err := strconv.ParseUint(aheadStr[1:], 10, 64); err == nil {
 						info.AheadRemote = aheadBy
 					}
 				}
 				if len(behindStr) > 1 {
-					if behindBy, err := strconv.ParseUint(behindStr, 10, 64); err == nil {
+					if behindBy, err := strconv.ParseUint(behindStr[1:], 10, 64); err == nil {
 						info.BehindRemote = behindBy
 					}
 				}
@@ -233,9 +233,9 @@ func reducePathWidth(path string) string {
 		if i == len(paths)-1 {
 			shortPaths[i] = path
 		} else if strings.HasPrefix(path, ".") && len(runes) > 3 {
-			shortPaths[i] = string([]rune(path)[:3])
+			shortPaths[i] = string(runes[:3])
 		} else if !strings.HasPrefix(path, ".") && len(runes) > 2 {
-			shortPaths[i] = string([]rune(path)[:2])
+			shortPaths[i] = string(runes[:2])
 		} else {
 			shortPaths[i] = path
 		}
@@ -257,7 +257,7 @@ func main() {
 			prompt.sb.WriteRune(' ')
 			prompt.writeColored(ansiPink, shellEscape(jjInfo.ChangeIDPrefix))
 			if len(jjInfo.Bookmarks) > 0 {
-				prompt.writeColored(ansiWhite, "(")
+				prompt.writeColored(ansiWhite, " (")
 				prompt.sb.WriteString(shellEscape(strings.Join(jjInfo.Bookmarks, " ")))
 				prompt.sb.WriteString(")")
 			}
