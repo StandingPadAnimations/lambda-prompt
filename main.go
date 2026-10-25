@@ -90,7 +90,7 @@ func getJJPromptInfo() (*JJPromptInfo, error) {
 }
 
 func getGitPromptInfo() (*GitPromptInfo, error) {
-	cmd := exec.Command("git", "status", "--porcelain=v2", "--branch", "--show-stash")
+	cmd := exec.Command("git", "--no-optional-locks", "status", "--porcelain=v2", "--branch", "--show-stash")
 	out, err := cmd.Output()
 	if err != nil {
 		return nil, err
@@ -107,7 +107,11 @@ func getGitPromptInfo() (*GitPromptInfo, error) {
 		switch {
 		case strings.HasPrefix(line, "# branch.oid "):
 			if oid := strings.TrimPrefix(line, "# branch.oid "); len(oid) >= 7 {
-				info.RefName = "@" + oid[:7]
+				if oid == "(initial)" {
+					info.RefName = "(initial)"
+				} else {
+					info.RefName = "@" + oid[:7]
+				}
 			} else {
 				info.RefName = "@" + oid
 			}
@@ -122,19 +126,24 @@ func getGitPromptInfo() (*GitPromptInfo, error) {
 			}
 		case strings.HasPrefix(line, "# branch.ab "):
 			aheadBehind := strings.TrimPrefix(line, "# branch.ab ")
-			aheadBehindSplit := strings.Split(aheadBehind, " ")
-			if aheadBy, err := strconv.ParseUint(aheadBehindSplit[0][1:], 10, 64); err == nil {
-				info.AheadRemote = aheadBy
-			}
-			if behindBy, err := strconv.ParseUint(aheadBehindSplit[1][1:], 10, 64); err == nil {
-				info.BehindRemote = behindBy
+			if aheadStr, behindStr, ok := strings.Cut(aheadBehind, " "); ok {
+				if len(aheadStr) > 1 {
+					if aheadBy, err := strconv.ParseUint(aheadStr, 10, 64); err == nil {
+						info.AheadRemote = aheadBy
+					}
+				}
+				if len(behindStr) > 1 {
+					if behindBy, err := strconv.ParseUint(behindStr, 10, 64); err == nil {
+						info.BehindRemote = behindBy
+					}
+				}
 			}
 
 		case line[0] == '?':
 			info.UntrackedFiles++
 		case line[0] == 'u':
 			info.UnmergedFiles++
-		case line[0] == '1' || line[0] == '2' || line[0] == 'u':
+		case (line[0] == '1' || line[0] == '2') && len(line) >= 4:
 			x := line[2]
 			y := line[3]
 			if x != '.' {
