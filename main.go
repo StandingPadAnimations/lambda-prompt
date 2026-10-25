@@ -3,12 +3,14 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/json/v2"
 	"fmt"
 	"os"
 	"os/exec"
 	"strconv"
 	"strings"
+	"time"
 )
 
 const (
@@ -106,21 +108,26 @@ func getJJPromptInfo() (*JJPromptInfo, error) {
 			f.status() == 'added' || f.status() == 'copied'
 		).len()
 	})`
-	cmd, err := exec.Command("jj", "log", "--no-graph", "-r", "@", "--color=never", "-T", jjTemplate).Output()
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancel()
+
+	out, err := exec.CommandContext(ctx, "jj", "log", "--no-graph", "-r", "@", "--color=never", "-T", jjTemplate).Output()
 	if err != nil {
 		return nil, err
 	}
 
 	var info JJPromptInfo
-	if err := json.Unmarshal(cmd, &info); err != nil {
+	if err := json.Unmarshal(out, &info); err != nil {
 		return nil, err
 	}
 	return &info, nil
 }
 
 func getGitPromptInfo() (*GitPromptInfo, error) {
-	cmd := exec.Command("git", "--no-optional-locks", "status", "--porcelain=v2", "--branch", "--show-stash")
-	out, err := cmd.Output()
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancel()
+
+	out, err := exec.CommandContext(ctx, "git", "status", "--porcelain=v2", "--branch", "--show-stash").Output()
 	if err != nil {
 		return nil, err
 	}
