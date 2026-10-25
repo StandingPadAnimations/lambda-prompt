@@ -81,10 +81,9 @@ func getJJPromptInfo() (*JJPromptInfo, error) {
 	if err != nil {
 		return nil, err
 	}
-	jjInfo := strings.TrimSpace(string(cmd))
 
 	var info JJPromptInfo
-	if err := json.Unmarshal([]byte(jjInfo), &info); err != nil {
+	if err := json.Unmarshal(cmd, &info); err != nil {
 		return nil, err
 	}
 	return &info, nil
