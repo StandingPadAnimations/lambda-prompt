@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -18,6 +19,14 @@ const (
 	ansiPink  = "\\[\033[35m\\]"
 	ansiWhite = "\\[\033[97m\\]"
 	ansiReset = "\\[\033[0m\\]"
+)
+
+type vcsKind int
+
+const (
+	vcsNone vcsKind = iota
+	vcsJJ
+	vcsGit
 )
 
 const initScript = `
@@ -80,6 +89,23 @@ type JJPromptInfo struct {
 	ChangeIDPrefix string   `json:"change_id_prefix"`
 	ModifiedFiles  uint64   `json:"modified_files"`
 	UntrackedFiles uint64   `json:"untracked_files"`
+}
+
+func detectVCS(cwd string) vcsKind {
+	dir := cwd
+	for {
+		if _, err := os.Stat(filepath.Join(dir, ".jj")); err == nil {
+			return vcsJJ
+		} else if _, err := os.Stat(filepath.Join(dir, ".git")); err == nil {
+			return vcsGit
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break
+		}
+		dir = parent
+	}
+	return vcsNone
 }
 
 func getPythonVenv() (string, bool) {
@@ -209,20 +235,19 @@ func shellEscape(s string) string {
 func getCwd() string {
 	cwd, err := os.Getwd()
 	if err != nil {
-		cwd = "CAN'T GET CURRENT WORKING DIRECTORY"
-	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return cwd
-	}
-
-	if cwd == home || strings.HasPrefix(cwd, home+"/") {
-		cwd = strings.Replace(cwd, home, "~", 1)
+		cwd = "(null)"
 	}
 	return cwd
 }
 
-func reducePathWidth(path string) string {
+func formatPath(path string) string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return path
+	}
+	if path == home || strings.HasPrefix(path, home+"/") {
+		path = strings.Replace(path, home, "~", 1)
+	}
 	if len(path) < 30 {
 		return path
 	}
@@ -252,27 +277,34 @@ func main() {
 			prompt.sb.WriteString(envName)
 			prompt.sb.WriteString(") ")
 		}
-		prompt.writeColored(ansiBlue, shellEscape(reducePathWidth(getCwd())))
-		if jjInfo, err := getJJPromptInfo(); err == nil {
-			prompt.sb.WriteRune(' ')
-			prompt.writeColored(ansiPink, shellEscape(jjInfo.ChangeIDPrefix))
-			if len(jjInfo.Bookmarks) > 0 {
-				prompt.writeColored(ansiWhite, " (")
-				prompt.sb.WriteString(shellEscape(strings.Join(jjInfo.Bookmarks, " ")))
-				prompt.sb.WriteString(")")
+
+		cwd := getCwd()
+		prompt.writeColored(ansiBlue, shellEscape(formatPath(cwd)))
+		switch detectVCS(cwd) {
+		case vcsJJ:
+			if jjInfo, err := getJJPromptInfo(); err == nil {
+				prompt.sb.WriteRune(' ')
+				prompt.writeColored(ansiPink, shellEscape(jjInfo.ChangeIDPrefix))
+				if len(jjInfo.Bookmarks) > 0 {
+					prompt.writeColored(ansiWhite, " (")
+					prompt.sb.WriteString(shellEscape(strings.Join(jjInfo.Bookmarks, " ")))
+					prompt.sb.WriteString(")")
+				}
+				prompt.writeStat(ansiWhite, "!", jjInfo.ModifiedFiles)
+				prompt.writeStat(ansiPink, "?", jjInfo.UntrackedFiles)
 			}
-			prompt.writeStat(ansiWhite, "!", jjInfo.ModifiedFiles)
-			prompt.writeStat(ansiPink, "?", jjInfo.UntrackedFiles)
-		} else if gitInfo, err := getGitPromptInfo(); err == nil {
-			prompt.sb.WriteRune(' ')
-			prompt.writeColored(ansiPink, shellEscape(gitInfo.RefName))
-			prompt.writeStat(ansiWhite, "!", gitInfo.ModifiedFiles)
-			prompt.writeStat(ansiPink, "?", gitInfo.UntrackedFiles)
-			prompt.writeStat(ansiBlue, "~", gitInfo.UnmergedFiles)
-			prompt.writeStat(ansiPink, "+", gitInfo.StagedFiles)
-			prompt.writeStat(ansiPink, "*", gitInfo.StashCount)
-			prompt.writeStat(ansiWhite, "a", gitInfo.AheadRemote)
-			prompt.writeStat(ansiPink, "b", gitInfo.BehindRemote)
+		case vcsGit:
+			if gitInfo, err := getGitPromptInfo(); err == nil {
+				prompt.sb.WriteRune(' ')
+				prompt.writeColored(ansiPink, shellEscape(gitInfo.RefName))
+				prompt.writeStat(ansiWhite, "!", gitInfo.ModifiedFiles)
+				prompt.writeStat(ansiPink, "?", gitInfo.UntrackedFiles)
+				prompt.writeStat(ansiBlue, "~", gitInfo.UnmergedFiles)
+				prompt.writeStat(ansiPink, "+", gitInfo.StagedFiles)
+				prompt.writeStat(ansiPink, "*", gitInfo.StashCount)
+				prompt.writeStat(ansiWhite, "a", gitInfo.AheadRemote)
+				prompt.writeStat(ansiPink, "b", gitInfo.BehindRemote)
+			}
 		}
 		prompt.sb.WriteString(" " + ansiBlue + "λ" + ansiReset + " ")
 		fmt.Print(prompt.sb.String())
