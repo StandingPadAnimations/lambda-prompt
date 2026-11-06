@@ -272,9 +272,9 @@ func formatPath(path string) string {
 	return strings.Join(shortPaths, "/")
 }
 
-func constructVCSPrompt(cwd string) string {
+func constructVCSPrompt(cwd string, vcs vcsKind) string {
 	builder := promptBuilder{}
-	switch detectVCS(cwd) {
+	switch vcs {
 	case vcsJJ:
 		if jjInfo, err := getJJPromptInfo(); err == nil {
 			builder.sb.WriteRune(' ')
@@ -340,7 +340,8 @@ func getCacheFilePath(cwd string) (string, error) {
 
 func constructVCSPromptBackground() {
 	cwd := getCwd()
-	vcsInfo := constructVCSPrompt(cwd)
+	vcs := detectVCS(cwd)
+	vcsInfo := constructVCSPrompt(cwd, vcs)
 	cacheFile, err := getCacheFilePath(cwd)
 	if err != nil {
 		return
@@ -388,9 +389,10 @@ func main() {
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Millisecond)
 		defer cancel()
 
+		vcs := detectVCS(cwd)
 		resultCh := make(chan string, 1)
 		go func() {
-			resultCh <- constructVCSPrompt(cwd)
+			resultCh <- constructVCSPrompt(cwd, vcs)
 		}()
 
 		select {
@@ -401,6 +403,13 @@ func main() {
 			cacheData := readCache(cwd)
 			if cacheData != "" {
 				prompt.sb.WriteString(cacheData)
+			} else {
+				switch vcs {
+				case vcsGit:
+					prompt.sb.WriteString("(git)")
+				case vcsJJ:
+					prompt.sb.WriteString("(jj)")
+				}
 			}
 		}
 
