@@ -351,7 +351,7 @@ func constructVCSPromptBackground() {
 		return
 	}
 	defer t.Cleanup()
-	if _, err := fmt.Fprintf(t, "%s\n", vcsInfo); err != nil {
+	if _, err := fmt.Fprintf(t, "%s", vcsInfo); err != nil {
 		return
 	}
 	t.CloseAtomicallyReplace()
