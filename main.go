@@ -4,6 +4,8 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json/v2"
 	"fmt"
 	"os"
@@ -12,6 +14,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/google/renameio/v2"
 )
 
 const (
@@ -268,6 +272,103 @@ func formatPath(path string) string {
 	return strings.Join(shortPaths, "/")
 }
 
+func constructVCSPrompt(cwd string) string {
+	builder := promptBuilder{}
+	switch detectVCS(cwd) {
+	case vcsJJ:
+		if jjInfo, err := getJJPromptInfo(); err == nil {
+			builder.sb.WriteRune(' ')
+			builder.writeColored(ansiPink, shellEscape(jjInfo.ChangeIDPrefix))
+			if len(jjInfo.Bookmarks) > 0 {
+				builder.writeColored(ansiWhite, " (")
+				builder.sb.WriteString(shellEscape(strings.Join(jjInfo.Bookmarks, " ")))
+				builder.sb.WriteString(")")
+			}
+			builder.writeStat(ansiWhite, "!", jjInfo.ModifiedFiles)
+			builder.writeStat(ansiPink, "?", jjInfo.UntrackedFiles)
+		}
+	case vcsGit:
+		if gitInfo, err := getGitPromptInfo(); err == nil {
+			builder.sb.WriteRune(' ')
+			builder.writeColored(ansiPink, shellEscape(gitInfo.RefName))
+			builder.writeStat(ansiWhite, "!", gitInfo.ModifiedFiles)
+			builder.writeStat(ansiPink, "?", gitInfo.UntrackedFiles)
+			builder.writeStat(ansiBlue, "~", gitInfo.UnmergedFiles)
+			builder.writeStat(ansiPink, "+", gitInfo.StagedFiles)
+			builder.writeStat(ansiPink, "*", gitInfo.StashCount)
+			builder.writeStat(ansiWhite, "a", gitInfo.AheadRemote)
+			builder.writeStat(ansiPink, "b", gitInfo.BehindRemote)
+		}
+	}
+	return builder.sb.String()
+}
+
+func createBackgroundWorker() error {
+	execPath, err := os.Executable()
+	if err != nil {
+		return err
+	}
+	cmd := exec.Command(execPath, "vcs-worker")
+	cmd.Stdin = nil
+	cmd.Stdout = nil
+	cmd.Stderr = os.Stderr
+	return cmd.Start()
+}
+
+func getCacheDir() (string, error) {
+	baseDir := os.Getenv("XDG_RUNTIME_DIR")
+	if baseDir == "" {
+		baseDir = filepath.Join(os.TempDir(), fmt.Sprintf("prompt-cache-%d", os.Getuid()))
+	} else {
+		baseDir = filepath.Join(baseDir, "lambda-prompt-cache")
+	}
+	if err := os.MkdirAll(baseDir, 0700); err != nil {
+		return "", err
+	}
+	return baseDir, nil
+}
+
+func getCacheFilePath(cwd string) (string, error) {
+	cacheDir, err := getCacheDir()
+	if err != nil {
+		return "", err
+	}
+	h := sha256.Sum256([]byte(cwd))
+	hashStr := hex.EncodeToString(h[:8])
+	return filepath.Join(cacheDir, fmt.Sprintf("cache-%s.txt", hashStr)), nil
+}
+
+func constructVCSPromptBackground() {
+	cwd := getCwd()
+	vcsInfo := constructVCSPrompt(cwd)
+	cacheFile, err := getCacheFilePath(cwd)
+	if err != nil {
+		return
+	}
+
+	t, err := renameio.TempFile("", cacheFile)
+	if err != nil {
+		return
+	}
+	defer t.Cleanup()
+	if _, err := fmt.Fprintf(t, "%s\n", vcsInfo); err != nil {
+		return
+	}
+	t.CloseAtomicallyReplace()
+}
+
+func readCache(cwd string) string {
+	cacheFile, err := getCacheFilePath(cwd)
+	if err != nil {
+		return ""
+	}
+	data, err := os.ReadFile(cacheFile)
+	if err != nil || len(data) == 0 {
+		return ""
+	}
+	return string(data)
+}
+
 func main() {
 	if len(os.Args) < 2 {
 		var prompt promptBuilder
@@ -280,32 +381,29 @@ func main() {
 
 		cwd := getCwd()
 		prompt.writeColored(ansiBlue, shellEscape(formatPath(cwd)))
-		switch detectVCS(cwd) {
-		case vcsJJ:
-			if jjInfo, err := getJJPromptInfo(); err == nil {
-				prompt.sb.WriteRune(' ')
-				prompt.writeColored(ansiPink, shellEscape(jjInfo.ChangeIDPrefix))
-				if len(jjInfo.Bookmarks) > 0 {
-					prompt.writeColored(ansiWhite, " (")
-					prompt.sb.WriteString(shellEscape(strings.Join(jjInfo.Bookmarks, " ")))
-					prompt.sb.WriteString(")")
-				}
-				prompt.writeStat(ansiWhite, "!", jjInfo.ModifiedFiles)
-				prompt.writeStat(ansiPink, "?", jjInfo.UntrackedFiles)
-			}
-		case vcsGit:
-			if gitInfo, err := getGitPromptInfo(); err == nil {
-				prompt.sb.WriteRune(' ')
-				prompt.writeColored(ansiPink, shellEscape(gitInfo.RefName))
-				prompt.writeStat(ansiWhite, "!", gitInfo.ModifiedFiles)
-				prompt.writeStat(ansiPink, "?", gitInfo.UntrackedFiles)
-				prompt.writeStat(ansiBlue, "~", gitInfo.UnmergedFiles)
-				prompt.writeStat(ansiPink, "+", gitInfo.StagedFiles)
-				prompt.writeStat(ansiPink, "*", gitInfo.StashCount)
-				prompt.writeStat(ansiWhite, "a", gitInfo.AheadRemote)
-				prompt.writeStat(ansiPink, "b", gitInfo.BehindRemote)
+
+		// Attempt to get VCS info synchronously,
+		// and then defer to a child proces that will
+		// write a cache we can use later
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Millisecond)
+		defer cancel()
+
+		resultCh := make(chan string, 1)
+		go func() {
+			resultCh <- constructVCSPrompt(cwd)
+		}()
+
+		select {
+		case result := <-resultCh:
+			prompt.sb.WriteString(result)
+		case <-ctx.Done():
+			_ = createBackgroundWorker()
+			cacheData := readCache(cwd)
+			if cacheData != "" {
+				prompt.sb.WriteString(cacheData)
 			}
 		}
+
 		prompt.sb.WriteString(" " + ansiBlue + "λ" + ansiReset + " ")
 		fmt.Print(prompt.sb.String())
 		return
@@ -313,6 +411,8 @@ func main() {
 	switch os.Args[1] {
 	case "init":
 		fmt.Println(initScript)
+	case "vcs-worker":
+		constructVCSPromptBackground()
 	default:
 		fmt.Println("Unknown command")
 	}
