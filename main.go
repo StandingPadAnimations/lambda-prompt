@@ -406,9 +406,9 @@ func main() {
 			} else {
 				switch vcs {
 				case vcsGit:
-					prompt.sb.WriteString("(git)")
+					prompt.sb.WriteString(" (git)")
 				case vcsJJ:
-					prompt.sb.WriteString("(jj)")
+					prompt.sb.WriteString(" (jj)")
 				}
 			}
 		}
