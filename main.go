@@ -141,7 +141,16 @@ func getJJPromptInfo() (*JJPromptInfo, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
 	defer cancel()
 
-	out, err := exec.CommandContext(ctx, "jj", "log", "--no-graph", "-r", "@", "--color=never", "-T", jjTemplate).Output()
+	out, err := exec.CommandContext(ctx, "jj",
+		"--at-op=@",
+		"log",
+		"--no-integrate-operation",
+		"--no-graph",
+		"--no-pager",
+		"-r", "@",
+		"--color=never",
+		"-T",
+		jjTemplate).Output()
 	if err != nil {
 		return nil, err
 	}
