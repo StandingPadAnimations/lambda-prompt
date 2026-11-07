@@ -6,7 +6,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json/v2"
 	"fmt"
 	"os"
 	"os/exec"
@@ -89,10 +88,11 @@ type GitPromptInfo struct {
 }
 
 type JJPromptInfo struct {
-	Bookmarks      []string `json:"bookmarks"`
-	ChangeIDPrefix string   `json:"change_id_prefix"`
-	ModifiedFiles  uint64   `json:"modified_files"`
-	UntrackedFiles uint64   `json:"untracked_files"`
+	Bookmarks      []string
+	ChangeID       string
+	PrefixLen      uint64
+	ModifiedFiles  uint64
+	UntrackedFiles uint64
 }
 
 func detectVCS(cwd string) vcsKind {
@@ -128,38 +128,105 @@ func getJJPromptInfo() (*JJPromptInfo, error) {
 	// Outsource as much work as we
 	// can to jj because we can do it
 	// in a single command.
-	const jjTemplate = `json({
-		'change_id_prefix' => change_id.shortest().prefix(),
-		'bookmarks' => bookmarks.map(|b| b.name()),
-		'modified_files' => self.diff().files().filter(|f| 
-			f.status() == 'modified' || f.status() == 'removed' || f.status() == 'renamed'
-		).len(),
-		'untracked_files' => self.diff().files().filter(|f| 
-			f.status() == 'added' || f.status() == 'copied'
-		).len()
-	})`
+	//
+	// Borrowed from the Starship project
+	const jjTemplate = `
+		if(
+			current_working_copy,
+			join(
+				"\n",
+				concat("current.hidden = ", hidden),
+				concat("current.immutable = ", immutable),
+				concat("current.divergent = ", divergent),
+				concat("current.change_offset = ", change_offset),
+				concat("current.change_id = \"", change_id, "\""),
+				concat("current.change_id_prefix_len = ", change_id.shortest().prefix().len()),
+				concat("current.conflicted = ", conflict),
+				concat("current.bookmarks = [", bookmarks.map(|bm| json(stringify(bm))).join(","), "]"),
+				concat(
+					"current.statuses = \"",
+					self
+						.diff()
+						.files()
+						.map(|file| file.status_char())
+						.join(""),
+					"\"",
+				),
+				"",
+			),
+			concat(
+				if(
+					conflict,
+					"parents.conflicted = true\n",
+				),
+				if(
+					bookmarks.len() > 0,
+					concat("parents.bookmarks = [", bookmarks.map(|bm| json(stringify(bm))).join(","), "]\n"),
+				),
+			),
+		)
+	`
 	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
 	defer cancel()
 
 	out, err := exec.CommandContext(ctx, "jj",
-		"--at-op=@",
-		"log",
+		"--color", "never",
 		"--no-integrate-operation",
-		"--no-graph",
 		"--no-pager",
-		"-r", "@",
-		"--color=never",
-		"-T",
-		jjTemplate).Output()
+		"--quiet",
+		"show",
+		"@ | latest(heads(mutable() & ::@ & conflicts()), 1) | latest(bookmarks() & ::@, 1)",
+		"--no-patch",
+		"--template", jjTemplate).Output()
 	if err != nil {
 		return nil, err
 	}
 
-	var info JJPromptInfo
-	if err := json.Unmarshal(out, &info); err != nil {
-		return nil, err
+	info := &JJPromptInfo{}
+	scanner := bufio.NewScanner(bytes.NewReader(out))
+
+	for scanner.Scan() {
+		line := scanner.Text()
+		if len(line) == 0 {
+			continue
+		}
+
+		switch {
+		case strings.HasPrefix(line, "current.change_id = "):
+			info.ChangeID = strings.Trim(strings.TrimPrefix(line, "current.change_id = "), "\"")
+		case strings.HasPrefix(line, "current.change_id_prefix_len = "):
+			prefixLen := strings.TrimPrefix(line, "current.change_id_prefix_len = ")
+			if count, err := strconv.ParseUint(prefixLen, 10, 64); err == nil {
+				info.PrefixLen = count
+			}
+		case strings.HasPrefix(line, "current.statuses ="):
+			cleanedLine := strings.Trim(strings.TrimPrefix(line, "current.statuses = "), "\"")
+			for _, char := range cleanedLine {
+				if char == 'M' || char == 'D' || char == 'R' {
+					info.ModifiedFiles++
+				} else if char == 'A' || char == 'C' {
+					info.UntrackedFiles++
+				}
+			}
+		case strings.HasPrefix(line, "current.bookmarks ="):
+			fallthrough
+		case strings.HasPrefix(line, "parents.bookmarks = "):
+			list := strings.TrimPrefix(line, "current.bookmarks = ")
+			list = strings.TrimPrefix(list, "parents.bookmarks = ")
+			list = strings.Trim(list, "[]")
+			if len(list) > 0 {
+				for _, bookmark := range strings.Split(list, ",") {
+					cleanedBookmark := strings.TrimSpace(bookmark)
+					cleanedBookmark = strings.Trim(cleanedBookmark, "\"")
+					if cleanedBookmark != "" {
+						info.Bookmarks = append(info.Bookmarks, cleanedBookmark)
+					}
+				}
+			}
+		}
 	}
-	return &info, nil
+
+	return info, nil
 }
 
 func getGitPromptInfo() (*GitPromptInfo, error) {
@@ -287,7 +354,7 @@ func constructVCSPrompt(cwd string, vcs vcsKind) string {
 	case vcsJJ:
 		if jjInfo, err := getJJPromptInfo(); err == nil {
 			builder.sb.WriteRune(' ')
-			builder.writeColored(ansiPink, shellEscape(jjInfo.ChangeIDPrefix))
+			builder.writeColored(ansiPink, shellEscape(jjInfo.ChangeID[:jjInfo.PrefixLen]))
 			if len(jjInfo.Bookmarks) > 0 {
 				builder.writeColored(ansiWhite, " (")
 				builder.sb.WriteString(shellEscape(strings.Join(jjInfo.Bookmarks, " ")))
@@ -393,7 +460,7 @@ func main() {
 		prompt.writeColored(ansiBlue, shellEscape(formatPath(cwd)))
 
 		// Attempt to get VCS info synchronously,
-		// and then defer to a child proces that will
+		// and then defer to a child process that will
 		// write a cache we can use later
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Millisecond)
 		defer cancel()
