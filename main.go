@@ -482,9 +482,9 @@ func main() {
 			} else {
 				switch vcs {
 				case vcsGit:
-					prompt.sb.WriteString(" (git)")
+					prompt.writeColored(ansiPink, " (git)")
 				case vcsJJ:
-					prompt.sb.WriteString(" (jj)")
+					prompt.writeColored(ansiPink, " (jj)")
 				}
 			}
 		}
