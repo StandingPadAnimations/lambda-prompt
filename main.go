@@ -124,48 +124,49 @@ func getPythonVenv() (string, bool) {
 	return split[len(split)-1], true
 }
 
-func getJJPromptInfo() (*JJPromptInfo, error) {
-	// Outsource as much work as we
-	// can to jj because we can do it
-	// in a single command.
-	//
-	// Borrowed from the Starship project
-	const jjTemplate = `
-		if(
-			current_working_copy,
-			join(
-				"\n",
-				concat("current.hidden = ", hidden),
-				concat("current.immutable = ", immutable),
-				concat("current.divergent = ", divergent),
-				concat("current.change_offset = ", change_offset),
-				concat("current.change_id = \"", change_id, "\""),
-				concat("current.change_id_prefix_len = ", change_id.shortest().prefix().len()),
-				concat("current.conflicted = ", conflict),
-				concat("current.bookmarks = [", bookmarks.map(|bm| json(stringify(bm))).join(","), "]"),
-				concat(
-					"current.statuses = \"",
-					self
-						.diff()
-						.files()
-						.map(|file| file.status_char())
-						.join(""),
-					"\"",
-				),
-				"",
-			),
+// Outsource as much work as we
+// can to jj because we can do it
+// in a single command.
+//
+// Borrowed from the Starship project
+const jjTemplate = `
+	if(
+		current_working_copy,
+		join(
+			"\n",
+			concat("current.hidden = ", hidden),
+			concat("current.immutable = ", immutable),
+			concat("current.divergent = ", divergent),
+			concat("current.change_offset = ", change_offset),
+			concat("current.change_id = \"", change_id, "\""),
+			concat("current.change_id_prefix_len = ", change_id.shortest().prefix().len()),
+			concat("current.conflicted = ", conflict),
+			concat("current.bookmarks = [", bookmarks.map(|bm| json(stringify(bm))).join(","), "]"),
 			concat(
-				if(
-					conflict,
-					"parents.conflicted = true\n",
-				),
-				if(
-					bookmarks.len() > 0,
-					concat("parents.bookmarks = [", bookmarks.map(|bm| json(stringify(bm))).join(","), "]\n"),
-				),
+				"current.statuses = \"",
+				self
+					.diff()
+					.files()
+					.map(|file| file.status_char())
+					.join(""),
+				"\"",
 			),
-		)
-	`
+			"",
+		),
+		concat(
+			if(
+				conflict,
+				"parents.conflicted = true\n",
+			),
+			if(
+				bookmarks.len() > 0,
+				concat("parents.bookmarks = [", bookmarks.map(|bm| json(stringify(bm))).join(","), "]\n"),
+			),
+		),
+	)
+`
+
+func getJJPromptInfoWorkingCopy() (*JJPromptInfo, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
 	defer cancel()
 
@@ -182,9 +183,42 @@ func getJJPromptInfo() (*JJPromptInfo, error) {
 		return nil, err
 	}
 
-	info := &JJPromptInfo{}
 	scanner := bufio.NewScanner(bytes.NewReader(out))
+	info, err := parseJJOutput(scanner, true)
+	if err != nil {
+		return nil, err
+	}
+	return info, nil
+}
 
+func getJJPromptInfoWithoutWorkingCopy() (*JJPromptInfo, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+	defer cancel()
+
+	out, err := exec.CommandContext(ctx, "jj",
+		"--color", "never",
+		"--ignore-working-copy",
+		"--no-integrate-operation",
+		"--no-pager",
+		"--quiet",
+		"show",
+		"@ | latest(heads(mutable() & ::@ & conflicts()), 1) | latest(bookmarks() & ::@, 1)",
+		"--no-patch",
+		"--template", jjTemplate).Output()
+	if err != nil {
+		return nil, err
+	}
+
+	scanner := bufio.NewScanner(bytes.NewReader(out))
+	info, err := parseJJOutput(scanner, false)
+	if err != nil {
+		return nil, err
+	}
+	return info, nil
+}
+
+func parseJJOutput(scanner *bufio.Scanner, workingCopy bool) (*JJPromptInfo, error) {
+	info := &JJPromptInfo{}
 	for scanner.Scan() {
 		line := scanner.Text()
 		if len(line) == 0 {
@@ -199,7 +233,7 @@ func getJJPromptInfo() (*JJPromptInfo, error) {
 			if count, err := strconv.ParseUint(prefixLen, 10, 64); err == nil {
 				info.PrefixLen = count
 			}
-		case strings.HasPrefix(line, "current.statuses ="):
+		case strings.HasPrefix(line, "current.statuses =") && workingCopy:
 			cleanedLine := strings.Trim(strings.TrimPrefix(line, "current.statuses = "), "\"")
 			for _, char := range cleanedLine {
 				if char == 'M' || char == 'D' || char == 'R' {
@@ -225,7 +259,6 @@ func getJJPromptInfo() (*JJPromptInfo, error) {
 			}
 		}
 	}
-
 	return info, nil
 }
 
@@ -348,11 +381,18 @@ func formatPath(path string) string {
 	return strings.Join(shortPaths, "/")
 }
 
-func constructVCSPrompt(cwd string, vcs vcsKind) string {
+func constructVCSPrompt(cwd string, vcs vcsKind, workingCopy bool) string {
 	builder := promptBuilder{}
 	switch vcs {
 	case vcsJJ:
-		if jjInfo, err := getJJPromptInfo(); err == nil {
+		var jjInfo *JJPromptInfo
+		var err error
+		if workingCopy {
+			jjInfo, err = getJJPromptInfoWorkingCopy()
+		} else {
+			jjInfo, err = getJJPromptInfoWithoutWorkingCopy()
+		}
+		if err == nil {
 			builder.sb.WriteRune(' ')
 			builder.writeColored(ansiPink, shellEscape(jjInfo.ChangeID[:jjInfo.PrefixLen]))
 			if len(jjInfo.Bookmarks) > 0 {
@@ -379,12 +419,12 @@ func constructVCSPrompt(cwd string, vcs vcsKind) string {
 	return builder.sb.String()
 }
 
-func createBackgroundWorker() error {
+func createBackgroundWorker(subCmd string) error {
 	execPath, err := os.Executable()
 	if err != nil {
 		return err
 	}
-	cmd := exec.Command(execPath, "vcs-worker")
+	cmd := exec.Command(execPath, subCmd)
 	cmd.Stdin = nil
 	cmd.Stdout = nil
 	cmd.Stderr = os.Stderr
@@ -414,10 +454,20 @@ func getCacheFilePath(cwd string) (string, error) {
 	return filepath.Join(cacheDir, fmt.Sprintf("cache-%s.txt", hashStr)), nil
 }
 
+func getJJStreamedInfoPath(cwd string) (string, error) {
+	cacheDir, err := getCacheDir()
+	if err != nil {
+		return "", err
+	}
+	h := sha256.Sum256([]byte(cwd))
+	hashStr := hex.EncodeToString(h[:8])
+	return filepath.Join(cacheDir, fmt.Sprintf("jj-streamed-%s.txt", hashStr)), nil
+}
+
 func constructVCSPromptBackground() {
 	cwd := getCwd()
 	vcs := detectVCS(cwd)
-	vcsInfo := constructVCSPrompt(cwd, vcs)
+	vcsInfo := constructVCSPrompt(cwd, vcs, true)
 	cacheFile, err := getCacheFilePath(cwd)
 	if err != nil {
 		return
@@ -434,12 +484,49 @@ func constructVCSPromptBackground() {
 	t.CloseAtomicallyReplace()
 }
 
+func streamJJInfoBackground() {
+	cwd := getCwd()
+	jjInfo, err := getJJPromptInfoWorkingCopy()
+	if err != nil {
+		return
+	}
+	jjStreamedFile, err := getJJStreamedInfoPath(cwd)
+	if err != nil {
+		return
+	}
+
+	builder := promptBuilder{}
+	builder.writeStat(ansiWhite, "!", jjInfo.ModifiedFiles)
+	builder.writeStat(ansiPink, "?", jjInfo.UntrackedFiles)
+	t, err := renameio.TempFile("", jjStreamedFile)
+	if err != nil {
+		return
+	}
+	defer t.Cleanup()
+	if _, err := fmt.Fprintf(t, "%s", builder.sb.String()); err != nil {
+		return
+	}
+	t.CloseAtomicallyReplace()
+}
+
 func readCache(cwd string) string {
 	cacheFile, err := getCacheFilePath(cwd)
 	if err != nil {
 		return ""
 	}
 	data, err := os.ReadFile(cacheFile)
+	if err != nil || len(data) == 0 {
+		return ""
+	}
+	return string(data)
+}
+
+func readJJStreamedInfo(cwd string) string {
+	jjStreamedFile, err := getJJStreamedInfoPath(cwd)
+	if err != nil {
+		return ""
+	}
+	data, err := os.ReadFile(jjStreamedFile)
 	if err != nil || len(data) == 0 {
 		return ""
 	}
@@ -461,21 +548,42 @@ func main() {
 
 		// Attempt to get VCS info synchronously,
 		// and then defer to a child process that will
-		// write a cache we can use later
+		// write a cache we can use later.
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Millisecond)
 		defer cancel()
 
 		vcs := detectVCS(cwd)
 		resultCh := make(chan string, 1)
 		go func() {
-			resultCh <- constructVCSPrompt(cwd, vcs)
+			// Working copy info will always be done in
+			// the background. While not as up-to-date as
+			// Git, the important info like change ID and
+			// bookmarks will be present anyway, so that's
+			// a reasonable tradeoff to make.
+			resultCh <- constructVCSPrompt(cwd, vcs, false)
 		}()
 
 		select {
 		case result := <-resultCh:
 			prompt.sb.WriteString(result)
+			if vcs == vcsJJ {
+				// Getting data for the current working
+				// copy is incredibly slow, since JJ creates
+				// a commit for the working copy, so we always
+				// fetch this in a background process that will
+				// write to a cache. If somehow even partial JJ
+				// info takes too long, then we simply just fetch
+				// the full data anyway.
+				_ = createBackgroundWorker("stream-jj-info")
+
+				// Unlike the full cache, this is partial info.
+				streamedData := readJJStreamedInfo(cwd)
+				if streamedData != "" {
+					prompt.sb.WriteString(streamedData)
+				}
+			}
 		case <-ctx.Done():
-			_ = createBackgroundWorker()
+			_ = createBackgroundWorker("construct-vcs-prompt-full")
 			cacheData := readCache(cwd)
 			if cacheData != "" {
 				prompt.sb.WriteString(cacheData)
@@ -496,8 +604,10 @@ func main() {
 	switch os.Args[1] {
 	case "init":
 		fmt.Println(initScript)
-	case "vcs-worker":
+	case "construct-vcs-prompt-full":
 		constructVCSPromptBackground()
+	case "stream-jj-info":
+		streamJJInfoBackground()
 	default:
 		fmt.Println("Unknown command")
 	}
