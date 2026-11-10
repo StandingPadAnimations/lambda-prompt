@@ -402,6 +402,15 @@ func constructVCSPrompt(cwd string, vcs vcsKind, workingCopy bool) string {
 			}
 			builder.writeStat(ansiWhite, "!", jjInfo.ModifiedFiles)
 			builder.writeStat(ansiPink, "?", jjInfo.UntrackedFiles)
+
+			// Extremely cursed, but it's the easiest
+			// way I can think of getting the current
+			// change ID without running the command
+			// another time.
+			if !workingCopy {
+				builder.sb.WriteRune('\n')
+				builder.sb.WriteString(jjInfo.ChangeID)
+			}
 		}
 	case vcsGit:
 		if gitInfo, err := getGitPromptInfo(); err == nil {
@@ -503,7 +512,7 @@ func streamJJInfoBackground() {
 		return
 	}
 	defer t.Cleanup()
-	if _, err := fmt.Fprintf(t, "%s", builder.sb.String()); err != nil {
+	if _, err := fmt.Fprintf(t, "%s\n%s", jjInfo.ChangeID, builder.sb.String()); err != nil {
 		return
 	}
 	t.CloseAtomicallyReplace()
@@ -521,16 +530,18 @@ func readCache(cwd string) string {
 	return string(data)
 }
 
-func readJJStreamedInfo(cwd string) string {
+func readJJStreamedInfo(cwd string) (string, string) {
 	jjStreamedFile, err := getJJStreamedInfoPath(cwd)
 	if err != nil {
-		return ""
+		return "", ""
 	}
 	data, err := os.ReadFile(jjStreamedFile)
 	if err != nil || len(data) == 0 {
-		return ""
+		return "", ""
 	}
-	return string(data)
+	dataStr := string(data)
+	lines := strings.Split(dataStr, "\n")
+	return lines[0], lines[1]
 }
 
 func main() {
@@ -565,7 +576,8 @@ func main() {
 
 		select {
 		case result := <-resultCh:
-			prompt.sb.WriteString(result)
+			resultSplit := strings.Split(result, "\n")
+			prompt.sb.WriteString(resultSplit[0])
 			if vcs == vcsJJ {
 				// Getting data for the current working
 				// copy is incredibly slow, since JJ creates
@@ -577,8 +589,8 @@ func main() {
 				_ = createBackgroundWorker("stream-jj-info")
 
 				// Unlike the full cache, this is partial info.
-				streamedData := readJJStreamedInfo(cwd)
-				if streamedData != "" {
+				changeID, streamedData := readJJStreamedInfo(cwd)
+				if changeID == resultSplit[1] && streamedData != "" {
 					prompt.sb.WriteString(streamedData)
 				}
 			}
